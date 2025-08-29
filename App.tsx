@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { parseCAHtml } from './services/caScraperService';
@@ -351,9 +350,24 @@ ${fileContents.join('\n\n---\n\n')}
     };
 
     const handleDeleteJob = async (jobId: string) => {
-        if (window.confirm("Tem certeza que deseja excluir esta busca?")) {
+        const job = jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        const confirmationMessage = (job.status === 'processing' || job.status === 'pending')
+            ? "Esta busca está na fila ou em andamento. Deseja cancelá-la e excluí-la?"
+            : "Tem certeza que deseja excluir o resultado desta busca?";
+        
+        if (window.confirm(confirmationMessage)) {
+            // If job is processing or pending, tell SW to cancel/ignore it
+            if ((job.status === 'processing' || job.status === 'pending') && navigator.serviceWorker.controller) {
+                 navigator.serviceWorker.controller.postMessage({
+                    type: 'CANCEL_SIMILARITY_JOB',
+                    payload: { jobId }
+                });
+            }
+            
             await idb.deleteJob(jobId);
-            setJobs(jobs.filter(j => j.id !== jobId));
+            setJobs(prevJobs => prevJobs.filter(j => j.id !== jobId));
             if (viewingJobResult?.id === jobId) {
                 setViewingJobResult(null);
             }
