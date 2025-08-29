@@ -158,6 +158,11 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             const file = libraryFiles[i];
             const fileContent = await fetchUrlAsText(file.url);
             
+            // If fetching the content failed, abort the entire job.
+            if (fileContent.startsWith('[Erro')) {
+                throw new Error(fileContent);
+            }
+            
             const perFilePrompt = `
                 Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
                 
@@ -188,7 +193,8 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
                 individualResults.push(`Análise do documento ${file.url}:\n${response.text}`);
             } catch (fileError) {
                 console.error(`Failed to analyze file ${file.url} after retries:`, fileError);
-                individualResults.push(`[ERRO] A análise do documento ${file.url} falhou após múltiplas tentativas.`);
+                // Throw an error to stop the entire job process and mark it as failed.
+                throw new Error(`A análise do documento ${file.url} falhou após múltiplas tentativas.`);
             }
             
             job.progress = i + 1;
