@@ -1,0 +1,5 @@
+{
+  "name": "EPI CA Inspector",
+  "description": "A tool to display and compare details of Personal Protective Equipment (EPI) by providing the HTML content of its Certificate of Approval (CA) page from consultaca.com.",
+  "requestFramePermissions": []
+}
