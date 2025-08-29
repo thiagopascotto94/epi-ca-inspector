@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: '/',
-    plugins: [basicSsl()],
+    // plugins: [basicSsl()],
     build: {
       rollupOptions: {
         input: {

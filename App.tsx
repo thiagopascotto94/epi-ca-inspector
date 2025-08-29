@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { parseCAHtml } from './services/caScraperService';
@@ -71,13 +72,11 @@ const App: React.FC = () => {
             }
         };
 
-        if (navigator.serviceWorker) {
-            navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+        navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
 
-            return () => {
-                navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
-            };
-        }
+        return () => {
+            navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+        };
     }, []);
 
     // Effect to manage toast messages
@@ -117,7 +116,7 @@ const App: React.FC = () => {
         if (target === 'primary') setCaData(null);
         else setComparisonData(null);
         
-        const MAX_RETRIES = 3;
+        const MAX_RETRIES = 10;
         let lastError: Error | null = null;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -305,9 +304,11 @@ ${fileContents.join('\n\n---\n\n')}
     const handleFindSimilar = async () => {
         if (!caData) return alert("Dados do CA principal não encontrados.");
         if (findSimilarLibraryId === 'none') return alert("Por favor, selecione uma biblioteca.");
-        if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return alert("Service Worker não está ativo. A busca em segundo plano não pode ser iniciada.");
+        if (!('serviceWorker' in navigator)) {
+            return alert("Service Workers não são suportados neste navegador. A busca em segundo plano está desativada.");
+        }
         if (!process.env.API_KEY) return alert("A chave de API não foi configurada.");
-        
+
         const selectedLibrary = libraries.find(lib => lib.id === findSimilarLibraryId);
         if (!selectedLibrary || selectedLibrary.files.length === 0) return alert("A biblioteca selecionada está vazia.");
 
@@ -330,14 +331,20 @@ ${fileContents.join('\n\n---\n\n')}
 
             await idb.addJob(newJob);
             setJobs(prevJobs => [newJob, ...prevJobs]);
-            
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_SIMILARITY_JOB',
-                payload: {
-                    jobId: newJob.id,
-                    apiKey: process.env.API_KEY
-                }
-            });
+
+            // Use .ready for a more robust way to get the active service worker
+            const registration = await navigator.serviceWorker.ready;
+            if (registration.active) {
+                registration.active.postMessage({
+                    type: 'START_SIMILARITY_JOB',
+                    payload: {
+                        jobId: newJob.id,
+                        apiKey: process.env.API_KEY
+                    }
+                });
+            } else {
+                throw new Error("O Service Worker está registrado, mas não está ativo para receber a tarefa.");
+            }
 
             setToastMessage("Busca de similaridade iniciada em segundo plano!");
             setShowFindSimilarUI(false);
@@ -345,7 +352,7 @@ ${fileContents.join('\n\n---\n\n')}
 
         } catch (err) {
             console.error("Failed to start similarity job:", err);
-            alert("Ocorreu um erro ao iniciar a busca em segundo plano.");
+            alert(`Ocorreu um erro ao iniciar a busca em segundo plano: ${(err as Error).message}`);
         }
     };
 
@@ -356,20 +363,26 @@ ${fileContents.join('\n\n---\n\n')}
         const confirmationMessage = (job.status === 'processing' || job.status === 'pending')
             ? "Esta busca está na fila ou em andamento. Deseja cancelá-la e excluí-la?"
             : "Tem certeza que deseja excluir o resultado desta busca?";
-        
+
         if (window.confirm(confirmationMessage)) {
-            // If job is processing or pending, tell SW to cancel/ignore it
-            if ((job.status === 'processing' || job.status === 'pending') && navigator.serviceWorker.controller) {
-                 navigator.serviceWorker.controller.postMessage({
-                    type: 'CANCEL_SIMILARITY_JOB',
-                    payload: { jobId }
-                });
-            }
-            
-            await idb.deleteJob(jobId);
-            setJobs(prevJobs => prevJobs.filter(j => j.id !== jobId));
-            if (viewingJobResult?.id === jobId) {
-                setViewingJobResult(null);
+            try {
+                // If job is processing or pending, tell SW to cancel/ignore it
+                if ((job.status === 'processing' || job.status === 'pending') && ('serviceWorker' in navigator)) {
+                    const registration = await navigator.serviceWorker.ready;
+                    registration.active?.postMessage({
+                        type: 'CANCEL_SIMILARITY_JOB',
+                        payload: { jobId }
+                    });
+                }
+
+                await idb.deleteJob(jobId);
+                setJobs(prevJobs => prevJobs.filter(j => j.id !== jobId));
+                if (viewingJobResult?.id === jobId) {
+                    setViewingJobResult(null);
+                }
+            } catch (err) {
+                console.error("Failed to cancel/delete job:", err);
+                alert(`Ocorreu um erro ao cancelar/excluir a tarefa: ${(err as Error).message}`);
             }
         }
     };
