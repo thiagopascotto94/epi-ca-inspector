@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CAData } from '../types';
 import { CheckCircleIcon, ExclamationCircleIcon, CalendarDaysIcon, LinkIcon, BuildingOfficeIcon, MapPinIcon, DocumentTextIcon } from './Icon';
@@ -9,17 +8,17 @@ interface CADetailCardProps {
 
 const InfoRow: React.FC<{ label: string; value: React.ReactNode; icon?: React.ReactNode }> = ({ label, value, icon }) => (
   <div className="py-2">
-    <dt className="text-sm font-medium text-slate-500 flex items-center gap-2">
+    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
       {icon}
       {label}
     </dt>
-    <dd className="mt-1 text-sm text-slate-900">{value}</dd>
+    <dd className="mt-1 text-sm text-slate-900 dark:text-slate-200">{value}</dd>
   </div>
 );
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-2 mb-4">{title}</h3>
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mb-6">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700 pb-2 mb-4">{title}</h3>
         {children}
     </div>
 );
@@ -30,31 +29,31 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
   return (
     <div className="w-full p-4">
       {/* Header */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">{data.equipmentName}</h1>
-        <p className="text-md text-slate-500">{data.equipmentType}</p>
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mb-6">
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{data.equipmentName}</h1>
+        <p className="text-md text-slate-500 dark:text-slate-400">{data.equipmentType}</p>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-                <p className="text-sm text-slate-500">Nº CA</p>
-                <p className="text-lg font-semibold text-slate-700">{data.caNumber}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nº CA</p>
+                <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">{data.caNumber}</p>
             </div>
             <div>
-                <p className="text-sm text-slate-500">Status</p>
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${isExpired ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Status</p>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${isExpired ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'}`}>
                 {isExpired ? <ExclamationCircleIcon className="w-4 h-4 mr-1"/> : <CheckCircleIcon className="w-4 h-4 mr-1"/>}
                 {data.status}
                 </span>
             </div>
             <div>
-                <p className="text-sm text-slate-500">Validade</p>
-                <p className="text-lg font-semibold text-slate-700 flex items-center justify-center gap-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Validade</p>
+                <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1">
                     <CalendarDaysIcon className="w-5 h-5 text-slate-400"/>
                     {data.validity}
                 </p>
             </div>
             <div>
-                <p className="text-sm text-slate-500">Vence em</p>
-                <p className="text-lg font-semibold text-slate-700">{data.daysRemaining || 'N/A'} dias</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Vence em</p>
+                <p className="text-lg font-semibold text-slate-700 dark:text-slate-200">{data.daysRemaining || 'N/A'} dias</p>
             </div>
         </div>
       </div>
@@ -63,7 +62,7 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
             <Section title="Descrição e Uso">
-                <dl className="divide-y divide-slate-200">
+                <dl className="divide-y divide-slate-200 dark:divide-slate-700">
                     <InfoRow label="Descrição Completa" value={data.description} />
                     <InfoRow label="Aprovado Para" value={data.approvedFor} />
                     <InfoRow label="Restrições" value={data.restrictions} />
@@ -81,7 +80,7 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
             </Section>
 
             <Section title="Normas Técnicas">
-                <ul className="list-disc list-inside space-y-1 text-slate-700">
+                <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                     {data.norms.map((norm, index) => <li key={index}>{norm}</li>)}
                 </ul>
             </Section>
@@ -92,7 +91,7 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
                     <InfoRow label="Razão Social" value={data.manufacturer.name} icon={<BuildingOfficeIcon className="w-5 h-5"/>}/>
                     <InfoRow label="CNPJ" value={data.manufacturer.cnpj} />
                     <InfoRow label="Endereço" value={data.manufacturer.address} icon={<MapPinIcon className="w-5 h-5"/>} />
-                    <InfoRow label="Site" value={<a href={`https://consultaca.com${data.manufacturer.site}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{data.manufacturer.site ? 'Visitar site' : 'N/A'}</a>} icon={<LinkIcon className="w-5 h-5"/>} />
+                    <InfoRow label="Site" value={<a href={`https://consultaca.com${data.manufacturer.site}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{data.manufacturer.site ? 'Visitar site' : 'N/A'}</a>} icon={<LinkIcon className="w-5 h-5"/>} />
                 </dl>
             </Section>
             
@@ -102,14 +101,14 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
                     <a key={index} href={photo} target="_blank" rel="noopener noreferrer">
                         <img src={photo} alt={`EPI Photo ${index + 1}`} className="rounded-lg object-cover w-full h-32 hover:opacity-80 transition-opacity" />
                     </a>
-                )) : <p className="text-sm text-slate-500">Nenhuma foto disponível.</p>}
+                )) : <p className="text-sm text-slate-500 dark:text-slate-400">Nenhuma foto disponível.</p>}
                 </div>
             </Section>
             
             <Section title="Histórico do CA">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-500">
-                        <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+                    <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
+                        <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
                             <tr>
                                 <th scope="col" className="px-4 py-2">Data</th>
                                 <th scope="col" className="px-4 py-2">Ocorrência</th>
@@ -117,9 +116,9 @@ export const CADetailCard: React.FC<CADetailCardProps> = ({ data }) => {
                         </thead>
                         <tbody>
                             {data.history.map((item, index) => (
-                                <tr key={index} className="bg-white border-b">
+                                <tr key={index} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700">
                                     <td className="px-4 py-2">{item.date}</td>
-                                    <td className="px-4 py-2 font-medium text-slate-900">{item.event}</td>
+                                    <td className="px-4 py-2 font-medium text-slate-900 dark:text-slate-200">{item.event}</td>
                                 </tr>
                             ))}
                         </tbody>

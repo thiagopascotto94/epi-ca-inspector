@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Library, LibraryFile } from '../types';
 import { TrashIcon, XMarkIcon, ArrowUpTrayIcon, ArrowDownTrayIcon } from './Icon';
+import { PasswordPrompt } from './PasswordPrompt';
+import { encryptData, decryptData } from '../services/cryptoService';
+
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,16 +12,25 @@ interface SettingsModalProps {
   onSaveLibrary: (library: Library) => void;
   onDeleteLibrary: (libraryId: string) => void;
   onImportLibraries: (libraries: Library[]) => void;
+  onShowConfirmation: (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    options?: { confirmText?: string; color?: string }
+  ) => void;
 }
 
 const emptyLibrary: Omit<Library, 'id'> = { name: '', files: [] };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, libraries, onSaveLibrary, onDeleteLibrary, onImportLibraries }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, libraries, onSaveLibrary, onDeleteLibrary, onImportLibraries, onShowConfirmation }) => {
   const [currentView, setCurrentView] = useState<'list' | 'form'>('list');
   const [editingLibrary, setEditingLibrary] = useState<Library | Omit<Library, 'id'>>(emptyLibrary);
   const [fileUrlInput, setFileUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isPasswordPromptOpen, setIsPasswordPromptOpen] = useState(false);
+  const [passwordPromptConfig, setPasswordPromptConfig] = useState<{ title: string; onConfirm: (password: string) => void; }>({ title: '', onConfirm: () => {} });
+  const [fileContentToImport, setFileContentToImport] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -80,16 +92,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
             alert("Nenhuma biblioteca para exportar.");
             return;
         }
-        const dataStr = JSON.stringify(libraries, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const linkElement = document.createElement('a');
-        linkElement.href = url;
-        linkElement.download = 'bibliotecas-epi-inspector.json';
-        document.body.appendChild(linkElement);
-        linkElement.click();
-        document.body.removeChild(linkElement);
-        URL.revokeObjectURL(url);
+        setPasswordPromptConfig({
+            title: 'Definir Senha para Exportação',
+            onConfirm: (password) => {
+                if (!password) {
+                    alert('A senha não pode ser vazia.');
+                    return;
+                }
+                const dataStr = JSON.stringify(libraries, null, 2);
+                const encryptedData = encryptData(dataStr, password);
+                const blob = new Blob([encryptedData], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const linkElement = document.createElement('a');
+                linkElement.href = url;
+                linkElement.download = 'bibliotecas-epi-inspector.json.enc';
+                document.body.appendChild(linkElement);
+                linkElement.click();
+                document.body.removeChild(linkElement);
+                URL.revokeObjectURL(url);
+                setIsPasswordPromptOpen(false);
+            }
+        });
+        setIsPasswordPromptOpen(true);
     };
 
     const handleTriggerImport = () => {
@@ -102,140 +126,182 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            try {
-                const text = e.target?.result;
-                if (typeof text !== 'string') throw new Error("Falha ao ler o arquivo.");
-                
-                const importedLibraries = JSON.parse(text);
-
-                if (!Array.isArray(importedLibraries) || (importedLibraries.length > 0 && (typeof importedLibraries[0].id !== 'string' || typeof importedLibraries[0].name !== 'string' || !Array.isArray(importedLibraries[0].files)))) {
-                    throw new Error("O arquivo JSON não parece ser um arquivo de bibliotecas válido.");
-                }
-                
-                if (window.confirm("Isso substituirá todas as suas bibliotecas atuais. Deseja continuar?")) {
-                    onImportLibraries(importedLibraries);
-                    alert(`${importedLibraries.length} biblioteca(s) importada(s) com sucesso!`);
-                }
-            } catch (error) {
-                console.error("Erro ao importar arquivo:", error);
-                alert(`Falha ao importar o arquivo. Verifique se o arquivo é um JSON válido. Erro: ${(error as Error).message}`);
-            } finally {
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                }
+            const text = e.target?.result;
+            if (typeof text !== 'string') {
+                alert("Falha ao ler o arquivo.");
+                return;
             }
+            
+            setFileContentToImport(text);
+            setPasswordPromptConfig({
+                title: 'Informar Senha do Arquivo',
+                onConfirm: (password) => {
+                    if (!password) {
+                        alert('Por favor, insira a senha.');
+                        return;
+                    }
+                    try {
+                        const decryptedData = decryptData(text, password);
+                        if (!decryptedData) {
+                            alert('Senha incorreta ou arquivo corrompido.');
+                            setIsPasswordPromptOpen(false);
+                            return;
+                        }
+
+                        const importedLibraries = JSON.parse(decryptedData);
+
+                        if (!Array.isArray(importedLibraries) || (importedLibraries.length > 0 && (typeof importedLibraries[0].id !== 'string' || typeof importedLibraries[0].name !== 'string' || !Array.isArray(importedLibraries[0].files)))) {
+                           throw new Error("O arquivo não parece ser um arquivo de bibliotecas válido.");
+                        }
+                        
+                        onShowConfirmation(
+                            'Confirmar Importação',
+                            'Isso substituirá todas as suas bibliotecas atuais. Deseja continuar?',
+                            () => {
+                                onImportLibraries(importedLibraries);
+                                alert(`${importedLibraries.length} biblioteca(s) importada(s) com sucesso!`);
+                            },
+                            { confirmText: 'Continuar', color: 'bg-sky-600 hover:bg-sky-700' }
+                        );
+                    } catch (error) {
+                        console.error("Erro ao importar arquivo:", error);
+                        alert(`Falha ao importar. O arquivo pode estar corrompido ou não é um arquivo de bibliotecas válido. Erro: ${(error as Error).message}`);
+                    } finally {
+                        setIsPasswordPromptOpen(false);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                        setFileContentToImport(null);
+                    }
+                }
+            });
+            setIsPasswordPromptOpen(true);
         };
         reader.readAsText(file);
     };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <header className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-bold text-slate-800">
-            {currentView === 'list' ? 'Gerenciar Bibliotecas' : ('id' in editingLibrary ? 'Editar Biblioteca' : 'Nova Biblioteca')}
-          </h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-800" aria-label="Fechar">
-            <XMarkIcon className="w-6 h-6" />
-          </button>
-        </header>
+    const closePasswordPrompt = () => {
+        setIsPasswordPromptOpen(false);
+        setFileContentToImport(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
 
-        <main className="p-6 overflow-y-auto">
-          {currentView === 'list' ? (
-            <div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                    <button onClick={handleAddNew} className="flex-grow sm:flex-grow-0 px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors">
-                        Criar Nova Biblioteca
-                    </button>
-                    <button onClick={handleExport} className="flex items-center gap-2 flex-grow sm:flex-grow-0 px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50" disabled={libraries.length === 0}>
-                        <ArrowUpTrayIcon className="w-5 h-5" />
-                        Exportar
-                    </button>
-                    <button onClick={handleTriggerImport} className="flex items-center gap-2 flex-grow sm:flex-grow-0 px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 transition-colors">
-                        <ArrowDownTrayIcon className="w-5 h-5" />
-                        Importar
-                    </button>
+  return (
+    <>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <header className="flex justify-between items-center p-4 border-b dark:border-slate-700">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                {currentView === 'list' ? 'Gerenciar Bibliotecas' : ('id' in editingLibrary ? 'Editar Biblioteca' : 'Nova Biblioteca')}
+            </h2>
+            <button onClick={onClose} className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Fechar">
+                <XMarkIcon className="w-6 h-6" />
+            </button>
+            </header>
+
+            <main className="p-6 overflow-y-auto">
+            {currentView === 'list' ? (
+                <div>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        <button onClick={handleAddNew} className="flex-grow sm:flex-grow-0 px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors">
+                            Criar Nova Biblioteca
+                        </button>
+                        <button onClick={handleExport} className="flex items-center gap-2 flex-grow sm:flex-grow-0 px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50" disabled={libraries.length === 0}>
+                            <ArrowUpTrayIcon className="w-5 h-5" />
+                            Exportar (Criptografado)
+                        </button>
+                        <button onClick={handleTriggerImport} className="flex items-center gap-2 flex-grow sm:flex-grow-0 px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 transition-colors">
+                            <ArrowDownTrayIcon className="w-5 h-5" />
+                            Importar
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept=".json,.enc,application/json,text/plain"
+                            className="hidden"
+                        />
+                    </div>
+                <ul className="space-y-2">
+                    {libraries.length > 0 ? libraries.map(lib => (
+                    <li key={lib.id} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-md">
+                        <div>
+                            <p className="font-semibold text-slate-700 dark:text-slate-200">{lib.name}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{lib.files.length} arquivo(s)</p>
+                        </div>
+                        <div className="flex gap-2">
+                        <button onClick={() => handleEdit(lib)} className="px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-600 border border-slate-300 dark:border-slate-500 rounded-md hover:bg-slate-100 dark:hover:bg-slate-500">Editar</button>
+                        <button onClick={() => onDeleteLibrary(lib.id)} className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md" aria-label={`Excluir ${lib.name}`}>
+                            <TrashIcon className="w-5 h-5" />
+                        </button>
+                        </div>
+                    </li>
+                    )) : <p className="text-slate-500 dark:text-slate-400">Nenhuma biblioteca criada ainda.</p>}
+                </ul>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                <div>
+                    <label htmlFor="lib-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Biblioteca</label>
                     <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept=".json,application/json"
-                        className="hidden"
+                    id="lib-name"
+                    type="text"
+                    value={editingLibrary.name}
+                    onChange={(e) => setEditingLibrary(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Ex: Normas de Segurança XYZ"
+                    className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                     />
                 </div>
-              <ul className="space-y-2">
-                {libraries.length > 0 ? libraries.map(lib => (
-                  <li key={lib.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-md">
-                    <div>
-                        <p className="font-semibold text-slate-700">{lib.name}</p>
-                        <p className="text-sm text-slate-500">{lib.files.length} arquivo(s)</p>
-                    </div>
+                <div>
+                    <label htmlFor="file-url" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Adicionar Link de Arquivo</label>
                     <div className="flex gap-2">
-                      <button onClick={() => handleEdit(lib)} className="px-3 py-1 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-100">Editar</button>
-                      <button onClick={() => onDeleteLibrary(lib.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-md" aria-label={`Excluir ${lib.name}`}>
-                        <TrashIcon className="w-5 h-5" />
-                      </button>
+                    <input
+                        id="file-url"
+                        type="url"
+                        value={fileUrlInput}
+                        onChange={(e) => setFileUrlInput(e.target.value)}
+                        placeholder="https://exemplo.com/documento.txt"
+                        className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddFile()}
+                    />
+                    <button onClick={handleAddFile} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 whitespace-nowrap">Adicionar</button>
                     </div>
-                  </li>
-                )) : <p className="text-slate-500">Nenhuma biblioteca criada ainda.</p>}
-              </ul>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="lib-name" className="block text-sm font-medium text-slate-700 mb-1">Nome da Biblioteca</label>
-                <input
-                  id="lib-name"
-                  type="text"
-                  value={editingLibrary.name}
-                  onChange={(e) => setEditingLibrary(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Ex: Normas de Segurança XYZ"
-                  className="w-full p-2 border border-slate-300 rounded-md shadow-sm"
-                />
-              </div>
-              <div>
-                <label htmlFor="file-url" className="block text-sm font-medium text-slate-700 mb-1">Adicionar Link de Arquivo</label>
-                <div className="flex gap-2">
-                  <input
-                    id="file-url"
-                    type="url"
-                    value={fileUrlInput}
-                    onChange={(e) => setFileUrlInput(e.target.value)}
-                    placeholder="https://exemplo.com/documento.txt"
-                    className="w-full p-2 border border-slate-300 rounded-md shadow-sm"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddFile()}
-                  />
-                  <button onClick={handleAddFile} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 whitespace-nowrap">Adicionar</button>
                 </div>
-              </div>
-              <div>
-                <h4 className="text-md font-semibold text-slate-600 mb-2">Arquivos na Biblioteca:</h4>
-                <ul className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-2 bg-slate-50">
-                    {editingLibrary.files.length > 0 ? editingLibrary.files.map(file => (
-                        <li key={file.id} className="flex justify-between items-center p-2 bg-white rounded">
-                            <span className="text-sm text-slate-800 truncate" title={file.url}>{file.url}</span>
-                            <button onClick={() => handleRemoveFile(file.id)} className="p-1 text-red-500 hover:bg-red-100 rounded-full" aria-label={`Remover ${file.url}`}>
-                                <XMarkIcon className="w-4 h-4"/>
-                            </button>
-                        </li>
-                    )) : <p className="text-sm text-slate-500 text-center p-2">Nenhum arquivo adicionado.</p>}
-                </ul>
-              </div>
-            </div>
-          )}
-        </main>
+                <div>
+                    <h4 className="text-md font-semibold text-slate-600 dark:text-slate-300 mb-2">Arquivos na Biblioteca:</h4>
+                    <ul className="space-y-2 max-h-60 overflow-y-auto border dark:border-slate-700 rounded-md p-2 bg-slate-50 dark:bg-slate-900/50">
+                        {editingLibrary.files.length > 0 ? editingLibrary.files.map(file => (
+                            <li key={file.id} className="flex justify-between items-center p-2 bg-white dark:bg-slate-800 rounded">
+                                <span className="text-sm text-slate-800 dark:text-slate-200 truncate" title={file.url}>{file.url}</span>
+                                <button onClick={() => handleRemoveFile(file.id)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-full" aria-label={`Remover ${file.url}`}>
+                                    <XMarkIcon className="w-4 h-4"/>
+                                </button>
+                            </li>
+                        )) : <p className="text-sm text-slate-500 dark:text-slate-400 text-center p-2">Nenhum arquivo adicionado.</p>}
+                    </ul>
+                </div>
+                </div>
+            )}
+            </main>
 
-        <footer className="flex justify-end items-center p-4 border-t gap-3">
-          {currentView === 'form' && (
-            <button onClick={handleBackToList} className="px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-md hover:bg-slate-300">
-              Voltar
+            <footer className="flex justify-end items-center p-4 border-t dark:border-slate-700 gap-3">
+            {currentView === 'form' && (
+                <button onClick={handleBackToList} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500">
+                Voltar
+                </button>
+            )}
+            <button onClick={currentView === 'form' ? handleSave : onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700">
+                {currentView === 'form' ? 'Salvar' : 'Fechar'}
             </button>
-          )}
-          <button onClick={currentView === 'form' ? handleSave : onClose} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700">
-            {currentView === 'form' ? 'Salvar' : 'Fechar'}
-          </button>
-        </footer>
-      </div>
-    </div>
+            </footer>
+        </div>
+        </div>
+        <PasswordPrompt
+            isOpen={isPasswordPromptOpen}
+            title={passwordPromptConfig.title}
+            onConfirm={passwordPromptConfig.onConfirm}
+            onCancel={closePasswordPrompt}
+        />
+    </>
   );
 };

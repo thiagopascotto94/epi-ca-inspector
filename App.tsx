@@ -1,18 +1,32 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { parseCAHtml } from './services/caScraperService';
 import { CAData, Library, SimilarityJob } from './types';
 import * as idb from './services/idbService';
 import { fetchUrlAsText, generateContentWithRetry } from './services/apiService';
+import { IS_DEV_MODE } from './config';
+import { FIXED_LIBRARIES } from './services/fixedData';
 
 import CADetailCard from './components/CADetailCard';
-import { DocumentTextIcon, SparklesIcon, Cog6ToothIcon, MagnifyingGlassIcon } from './components/Icon';
+import { DocumentTextIcon, SparklesIcon, Cog6ToothIcon, MagnifyingGlassIcon, ArrowPathIcon } from './components/Icon';
 import { AIAnalysisCard } from './components/AIAnalysisCard';
 import { SettingsModal } from './components/SettingsModal';
 import { FindSimilarCard } from './components/FindSimilarCard';
 import { BackgroundJobsCard } from './components/BackgroundJobsCard';
+import { ConversionSuggestionCard } from './components/ConversionSuggestionCard';
+import { ConfirmationDialog } from './components/ConfirmationDialog';
+import { ThemeSwitcher } from './components/ThemeSwitcher';
 
+type Theme = 'light' | 'dark';
+
+interface ConfirmationState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmButtonText?: string;
+    confirmButtonColor?: string;
+}
 
 const App: React.FC = () => {
     const [caNumberInput, setCaNumberInput] = useState<string>('');
@@ -32,12 +46,20 @@ const App: React.FC = () => {
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [analysisLoadingMessage, setAnalysisLoadingMessage] = useState<string>('');
     
-    // Find Similar state (now for UI controls and displaying results)
+    // Find Similar state
     const [showFindSimilarUI, setShowFindSimilarUI] = useState<boolean>(false);
     const [findSimilarLibraryId, setFindSimilarLibraryId] = useState<string>('none');
     const [findSimilarDescription, setFindSimilarDescription] = useState<string>('');
     const [viewingJobResult, setViewingJobResult] = useState<SimilarityJob | null>(null);
     const [toastMessage, setToastMessage] = useState<string>('');
+
+    // Conversion Suggestion state
+    const [showConversionUI, setShowConversionUI] = useState<boolean>(false);
+    const [isConverting, setIsConverting] = useState<boolean>(false);
+    const [conversionResult, setConversionResult] = useState<string | null>(null);
+    const [conversionError, setConversionError] = useState<string | null>(null);
+    const [conversionLoadingMessage, setConversionLoadingMessage] = useState<string>('');
+    const [conversionLibraryId, setConversionLibraryId] = useState<string>('none');
 
     // Background Jobs State
     const [jobs, setJobs] = useState<SimilarityJob[]>([]);
@@ -47,16 +69,66 @@ const App: React.FC = () => {
     const [libraries, setLibraries] = useState<Library[]>([]);
     const [selectedLibraryId, setSelectedLibraryId] = useState<string>('none');
     
+    // Confirmation Dialog State
+    const [confirmation, setConfirmation] = useState<ConfirmationState>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+    });
+
+    // Theme state
+    const [theme, setTheme] = useState<Theme>(() => {
+        const savedTheme = localStorage.getItem('theme') as Theme | null;
+        const userPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return savedTheme || (userPrefersDark ? 'dark' : 'light');
+    });
+
+    useEffect(() => {
+        const root = window.document.documentElement;
+        root.classList.remove('light', 'dark');
+        root.classList.add(theme);
+        localStorage.setItem('theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+    };
+
+    const hideConfirmation = useCallback(() => {
+        setConfirmation({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+    }, []);
+
+    const showConfirmation = useCallback((title: string, message: string, onConfirm: () => void, options?: { confirmText?: string; color?: string }) => {
+        setConfirmation({
+            isOpen: true,
+            title,
+            message,
+            onConfirm: () => {
+                onConfirm();
+                hideConfirmation();
+            },
+            confirmButtonText: options?.confirmText,
+            confirmButtonColor: options?.color,
+        });
+    }, [hideConfirmation]);
+
     // Load initial data from localStorage and IndexedDB
     useEffect(() => {
+        if (IS_DEV_MODE) {
+            try {
+                const storedLibraries = localStorage.getItem('caLibraries');
+                if (storedLibraries) setLibraries(JSON.parse(storedLibraries));
+            } catch (e) {
+                console.error("Failed to load libraries from localStorage", e);
+            }
+        }
+        
         try {
             const storedHistory = localStorage.getItem('caSearchHistory');
             if (storedHistory) setSearchHistory(JSON.parse(storedHistory));
-            
-            const storedLibraries = localStorage.getItem('caLibraries');
-            if (storedLibraries) setLibraries(JSON.parse(storedLibraries));
         } catch (e) {
-            console.error("Failed to load data from localStorage", e);
+            console.error("Failed to load search history from localStorage", e);
         }
         
         idb.getAllJobs().then(setJobs).catch(err => console.error("Failed to load jobs from IDB", err));
@@ -112,11 +184,14 @@ const App: React.FC = () => {
         setAnalysisError(null);
         setShowFindSimilarUI(false);
         setViewingJobResult(null);
+        setConversionResult(null);
+        setConversionError(null);
+        setShowConversionUI(false);
 
         if (target === 'primary') setCaData(null);
         else setComparisonData(null);
         
-        const MAX_RETRIES = 10;
+        const MAX_RETRIES = 3;
         let lastError: Error | null = null;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -186,20 +261,26 @@ const App: React.FC = () => {
     }, []);
 
     const handleDeleteLibrary = useCallback((libraryId: string) => {
-        if (window.confirm("Tem certeza que deseja excluir esta biblioteca?")) {
-             setLibraries(prev => {
-                const newLibraries = prev.filter(lib => lib.id !== libraryId);
-                try {
-                    localStorage.setItem('caLibraries', JSON.stringify(newLibraries));
-                } catch (e) {
-                    console.error("Failed to save libraries to localStorage", e);
-                }
-                if (selectedLibraryId === libraryId) setSelectedLibraryId('none');
-                if(findSimilarLibraryId === libraryId) setFindSimilarLibraryId('none');
-                return newLibraries;
-            });
-        }
-    }, [selectedLibraryId, findSimilarLibraryId]);
+        showConfirmation(
+            'Confirmar Exclusão',
+            'Tem certeza que deseja excluir esta biblioteca? Esta ação não pode ser desfeita.',
+            () => {
+                 setLibraries(prev => {
+                    const newLibraries = prev.filter(lib => lib.id !== libraryId);
+                    try {
+                        localStorage.setItem('caLibraries', JSON.stringify(newLibraries));
+                    } catch (e) {
+                        console.error("Failed to save libraries to localStorage", e);
+                    }
+                    if (selectedLibraryId === libraryId) setSelectedLibraryId('none');
+                    if(findSimilarLibraryId === libraryId) setFindSimilarLibraryId('none');
+                    if(conversionLibraryId === libraryId) setConversionLibraryId('none');
+                    return newLibraries;
+                });
+            },
+            { confirmText: 'Excluir', color: 'bg-red-600 hover:bg-red-700' }
+        );
+    }, [selectedLibraryId, findSimilarLibraryId, conversionLibraryId, showConfirmation]);
 
     const handleImportLibraries = useCallback((importedLibraries: Library[]) => {
         if (!Array.isArray(importedLibraries)) {
@@ -211,10 +292,11 @@ const App: React.FC = () => {
             localStorage.setItem('caLibraries', JSON.stringify(importedLibraries));
             if (!importedLibraries.some(lib => lib.id === selectedLibraryId)) setSelectedLibraryId('none');
             if (!importedLibraries.some(lib => lib.id === findSimilarLibraryId)) setFindSimilarLibraryId('none');
+            if (!importedLibraries.some(lib => lib.id === conversionLibraryId)) setConversionLibraryId('none');
         } catch (e) {
             console.error("Failed to save imported libraries to localStorage", e);
         }
-    }, [selectedLibraryId, findSimilarLibraryId]);
+    }, [selectedLibraryId, findSimilarLibraryId, conversionLibraryId]);
     
     const handleAiAnalysis = async () => {
         if (!caData || !comparisonData) {
@@ -228,7 +310,13 @@ const App: React.FC = () => {
         setAnalysisLoadingMessage('');
 
         let knowledgeContext = '';
-        const selectedLibrary = libraries.find(lib => lib.id === selectedLibraryId);
+        let selectedLibrary: Library | undefined;
+
+        if (IS_DEV_MODE) {
+            selectedLibrary = libraries.find(lib => lib.id === selectedLibraryId);
+        } else {
+            selectedLibrary = FIXED_LIBRARIES[0];
+        }
 
         if (selectedLibrary && selectedLibrary.files.length > 0) {
             try {
@@ -301,16 +389,99 @@ ${fileContents.join('\n\n---\n\n')}
         }
     };
     
+    const handleConversionSuggestion = async () => {
+        if (!caData) {
+            setConversionError("Dados do CA principal não encontrados.");
+            return;
+        }
+
+        const selectedLibrary = IS_DEV_MODE ? libraries.find(lib => lib.id === conversionLibraryId) : FIXED_LIBRARIES[0];
+        
+        if (!selectedLibrary) {
+            const message = IS_DEV_MODE ? "Por favor, selecione uma biblioteca de conhecimento para a conversão." : "Biblioteca de produção não encontrada.";
+            setConversionError(message);
+            return;
+        }
+
+        setIsConverting(true);
+        setConversionResult(null);
+        setConversionError(null);
+        setConversionLoadingMessage('');
+
+        if (selectedLibrary.files.length === 0) {
+            setConversionError("A biblioteca selecionada está vazia.");
+            setIsConverting(false);
+            return;
+        }
+
+        let knowledgeBaseContent = '';
+        try {
+            setConversionLoadingMessage('Carregando arquivos da biblioteca...');
+            const fileContents = await Promise.all(selectedLibrary.files.map(file => fetchUrlAsText(file.url)));
+            knowledgeBaseContent = fileContents.join('\n\n---\n\n');
+        } catch (e) {
+            console.error("Error fetching library files for conversion:", e);
+            setConversionError("Falha ao carregar um ou mais arquivos da biblioteca. A análise não pode prosseguir.");
+            setIsConverting(false);
+            return;
+        }
+
+        try {
+            const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+
+            const prompt = `
+                Você é um especialista em Certificados de Aprovação (CAs) e fichas técnicas de Equipamentos de Proteção Individual (EPIs) para calçados. Sua principal tarefa é analisar as informações de um CA de concorrente e, com base em um conjunto de dados de referência (sua base de conhecimento), identificar e sugerir o produto da nossa linha que melhor corresponde a ele.
+
+                **Base de Conhecimento (Nossos Produtos):**
+                ---
+                ${knowledgeBaseContent}
+                ---
+
+                **CA do Concorrente para Análise:**
+                \`\`\`json
+                ${JSON.stringify(caData, null, 2)}
+                \`\`\`
+
+                **Formato da Resposta:**
+
+                Sua resposta deve ser estruturada em três seções:
+
+                1.  **Sugestão de Conversão:** A recomendação mais provável do nosso produto e seu respectivo CA.
+                2.  **Análise de Correspondência:** Uma breve análise que justifique a sugestão, destacando as características que se alinham (material, tipo de biqueira, palmilha, etc.) e as que podem ser diferentes.
+                3.  **Pontos de Atenção:** Qualquer diferença crítica (ex: sapato vs. bota, proteção S1 vs. S2, etc.) que o operador deve verificar manualmente.
+            `;
+
+            const response = await generateContentWithRetry(
+                ai,
+                { model: 'gemini-2.5-flash', contents: prompt },
+                3,
+                (attempt) => setConversionLoadingMessage(`Analisando... (Tentativa ${attempt}/3)`)
+            );
+
+            setConversionResult(response.text);
+
+        } catch (e) {
+            console.error("Conversion suggestion error after retries:", e);
+            setConversionError("Ocorreu um erro ao conectar com o serviço de IA após múltiplas tentativas. Verifique sua chave de API e tente novamente.");
+        } finally {
+            setIsConverting(false);
+            setConversionLoadingMessage('');
+        }
+    };
+
     const handleFindSimilar = async () => {
         if (!caData) return alert("Dados do CA principal não encontrados.");
-        if (findSimilarLibraryId === 'none') return alert("Por favor, selecione uma biblioteca.");
-        if (!('serviceWorker' in navigator)) {
-            return alert("Service Workers não são suportados neste navegador. A busca em segundo plano está desativada.");
-        }
+        if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return alert("Service Worker não está ativo. A busca em segundo plano não pode ser iniciada.");
         if (!process.env.API_KEY) return alert("A chave de API não foi configurada.");
-
-        const selectedLibrary = libraries.find(lib => lib.id === findSimilarLibraryId);
-        if (!selectedLibrary || selectedLibrary.files.length === 0) return alert("A biblioteca selecionada está vazia.");
+        
+        const selectedLibrary = IS_DEV_MODE ? libraries.find(lib => lib.id === findSimilarLibraryId) : FIXED_LIBRARIES[0];
+        
+        if (!selectedLibrary) {
+            const message = IS_DEV_MODE ? "Por favor, selecione uma biblioteca." : "Biblioteca de produção não configurada.";
+            return alert(message);
+        }
+        
+        if (selectedLibrary.files.length === 0) return alert("A biblioteca selecionada está vazia.");
 
         try {
             // Request notification permission
@@ -331,20 +502,14 @@ ${fileContents.join('\n\n---\n\n')}
 
             await idb.addJob(newJob);
             setJobs(prevJobs => [newJob, ...prevJobs]);
-
-            // Use .ready for a more robust way to get the active service worker
-            const registration = await navigator.serviceWorker.ready;
-            if (registration.active) {
-                registration.active.postMessage({
-                    type: 'START_SIMILARITY_JOB',
-                    payload: {
-                        jobId: newJob.id,
-                        apiKey: process.env.API_KEY
-                    }
-                });
-            } else {
-                throw new Error("O Service Worker está registrado, mas não está ativo para receber a tarefa.");
-            }
+            
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_SIMILARITY_JOB',
+                payload: {
+                    jobId: newJob.id,
+                    apiKey: process.env.API_KEY
+                }
+            });
 
             setToastMessage("Busca de similaridade iniciada em segundo plano!");
             setShowFindSimilarUI(false);
@@ -352,7 +517,7 @@ ${fileContents.join('\n\n---\n\n')}
 
         } catch (err) {
             console.error("Failed to start similarity job:", err);
-            alert(`Ocorreu um erro ao iniciar a busca em segundo plano: ${(err as Error).message}`);
+            alert("Ocorreu um erro ao iniciar a busca em segundo plano.");
         }
     };
 
@@ -363,28 +528,26 @@ ${fileContents.join('\n\n---\n\n')}
         const confirmationMessage = (job.status === 'processing' || job.status === 'pending')
             ? "Esta busca está na fila ou em andamento. Deseja cancelá-la e excluí-la?"
             : "Tem certeza que deseja excluir o resultado desta busca?";
-
-        if (window.confirm(confirmationMessage)) {
-            try {
-                // If job is processing or pending, tell SW to cancel/ignore it
-                if ((job.status === 'processing' || job.status === 'pending') && ('serviceWorker' in navigator)) {
-                    const registration = await navigator.serviceWorker.ready;
-                    registration.active?.postMessage({
+        
+        showConfirmation(
+            'Confirmar Exclusão',
+            confirmationMessage,
+            async () => {
+                if ((job.status === 'processing' || job.status === 'pending') && navigator.serviceWorker.controller) {
+                     navigator.serviceWorker.controller.postMessage({
                         type: 'CANCEL_SIMILARITY_JOB',
                         payload: { jobId }
                     });
                 }
-
+                
                 await idb.deleteJob(jobId);
                 setJobs(prevJobs => prevJobs.filter(j => j.id !== jobId));
                 if (viewingJobResult?.id === jobId) {
                     setViewingJobResult(null);
                 }
-            } catch (err) {
-                console.error("Failed to cancel/delete job:", err);
-                alert(`Ocorreu um erro ao cancelar/excluir a tarefa: ${(err as Error).message}`);
-            }
-        }
+            },
+            { confirmText: 'Excluir', color: 'bg-red-600 hover:bg-red-700' }
+        );
     };
 
     const handleClear = () => {
@@ -400,6 +563,10 @@ ${fileContents.join('\n\n---\n\n')}
         setViewingJobResult(null);
         setFindSimilarLibraryId('none');
         setFindSimilarDescription('');
+        setConversionResult(null);
+        setConversionError(null);
+        setConversionLibraryId('none');
+        setShowConversionUI(false);
     };
     
     const handleClearHistory = () => {
@@ -414,34 +581,39 @@ ${fileContents.join('\n\n---\n\n')}
     const isComparing = showComparison && !!comparisonData;
 
     return (
-        <div className="min-h-screen bg-slate-100 font-sans text-slate-800">
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300">
             {toastMessage && (
                 <div className="fixed top-5 right-5 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-[100] animate-bounce">
                     {toastMessage}
                 </div>
             )}
-            <header className="bg-white shadow-md">
+            <header className="sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-md z-40 dark:border-b dark:border-slate-800">
                 <div className="container mx-auto px-4 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <DocumentTextIcon className="w-8 h-8 text-sky-600"/>
-                        <h1 className="text-2xl font-bold text-slate-700">EPI CA Inspector</h1>
+                        <DocumentTextIcon className="w-8 h-8 text-sky-600 dark:text-sky-500"/>
+                        <h1 className="text-2xl font-bold text-slate-700 dark:text-slate-200">EPI CA Inspector</h1>
                     </div>
-                    <button onClick={() => setIsSettingsModalOpen(true)} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Configurações">
-                        <Cog6ToothIcon className="w-6 h-6"/>
-                    </button>
+                     <div className="flex items-center gap-2">
+                        <ThemeSwitcher theme={theme} toggleTheme={toggleTheme} />
+                        {IS_DEV_MODE && (
+                            <button onClick={() => setIsSettingsModalOpen(true)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Configurações">
+                                <Cog6ToothIcon className="w-6 h-6"/>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </header>
 
             <main className="container mx-auto p-4">
-                <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-                    <h2 className="text-xl font-semibold mb-2">Consultar Certificado de Aprovação (CA)</h2>
-                    <p className="text-slate-600 mb-4">
-                        Digite o número de um CA para buscar os detalhes diretamente do site <a href="https://consultaca.com/" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">consultaca.com</a>.
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mb-8">
+                    <h2 className="text-xl font-semibold mb-2 text-slate-900 dark:text-white">Consultar Certificado de Aprovação (CA)</h2>
+                    <p className="text-slate-600 dark:text-slate-400 mb-4">
+                        Digite o número de um CA para buscar os detalhes diretamente do site <a href="https://consultaca.com/" target="_blank" rel="noopener noreferrer" className="text-sky-600 dark:text-sky-500 hover:underline">consultaca.com</a>.
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label htmlFor="ca-input" className="block text-sm font-medium text-slate-700 mb-2">CA Principal</label>
+                            <label htmlFor="ca-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">CA Principal</label>
                             <div className="flex gap-2">
                                 <input
                                     id="ca-input"
@@ -449,18 +621,18 @@ ${fileContents.join('\n\n---\n\n')}
                                     value={caNumberInput}
                                     onChange={(e) => setCaNumberInput(e.target.value)}
                                     placeholder="Digite o número do CA"
-                                    className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition"
+                                    className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 dark:placeholder-slate-400 text-slate-900 dark:text-white"
                                     onKeyDown={(e) => e.key === 'Enter' && handleFetchAndParse(caNumberInput, 'primary')}
                                 />
-                                <button onClick={() => handleFetchAndParse(caNumberInput, 'primary')} disabled={!caNumberInput || isLoading} className="px-4 py-2 bg-slate-800 text-white font-semibold rounded-md hover:bg-slate-900 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                                <button onClick={() => handleFetchAndParse(caNumberInput, 'primary')} disabled={!caNumberInput || isLoading} className="px-4 py-2 bg-slate-800 dark:bg-sky-600 text-white font-semibold rounded-md hover:bg-slate-900 dark:hover:bg-sky-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
                                     {isLoading && loadingTarget === 'primary' ? loadingMessage.replace('Buscando...', 'Buscar') : 'Buscar CA'}
                                 </button>
                             </div>
                         </div>
                         <div>
                              <div className="flex items-center mb-2 h-7">
-                                <input type="checkbox" id="compare-toggle" checked={showComparison} onChange={() => setShowComparison(!showComparison)} className="h-4 w-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500"/>
-                                <label htmlFor="compare-toggle" className="ml-2 block text-sm font-medium text-slate-700">Comparar com outro CA</label>
+                                <input type="checkbox" id="compare-toggle" checked={showComparison} onChange={() => setShowComparison(!showComparison)} className="h-4 w-4 text-sky-600 border-slate-300 dark:border-slate-600 rounded focus:ring-sky-500 bg-slate-100 dark:bg-slate-700"/>
+                                <label htmlFor="compare-toggle" className="ml-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Comparar com outro CA</label>
                             </div>
                             {showComparison && (
                                 <div className="flex gap-2">
@@ -469,10 +641,10 @@ ${fileContents.join('\n\n---\n\n')}
                                         value={comparisonCaNumberInput}
                                         onChange={(e) => setComparisonCaNumberInput(e.target.value)}
                                         placeholder="Digite o segundo CA"
-                                        className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition"
+                                        className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 dark:placeholder-slate-400 text-slate-900 dark:text-white"
                                         onKeyDown={(e) => e.key === 'Enter' && handleFetchAndParse(comparisonCaNumberInput, 'secondary')}
                                     />
-                                    <button onClick={() => handleFetchAndParse(comparisonCaNumberInput, 'secondary')} disabled={!comparisonCaNumberInput || isLoading} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-md hover:bg-slate-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                                    <button onClick={() => handleFetchAndParse(comparisonCaNumberInput, 'secondary')} disabled={!comparisonCaNumberInput || isLoading} className="px-4 py-2 bg-slate-600 dark:bg-slate-500 text-white font-semibold rounded-md hover:bg-slate-700 dark:hover:bg-slate-600 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
                                         {isLoading && loadingTarget === 'secondary' ? loadingMessage.replace('Buscando...', 'Buscar') : 'Buscar'}
                                     </button>
                                 </div>
@@ -480,66 +652,110 @@ ${fileContents.join('\n\n---\n\n')}
                         </div>
                     </div>
                      <div className="mt-4 flex flex-wrap items-end gap-6">
-                        <button onClick={handleClear} className="px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-md hover:bg-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
+                        <button onClick={handleClear} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
                             Limpar Tudo
                         </button>
 
                         {caData && !showComparison && (
-                           <div className="border-l border-slate-200 pl-6">
-                                <button 
-                                    onClick={() => setShowFindSimilarUI(!showFindSimilarUI)} 
-                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                                >
-                                    <MagnifyingGlassIcon className="w-5 h-5"/>
-                                    Localizar Similar em Segundo Plano
-                                </button>
-                                {showFindSimilarUI && (
-                                    <div className="mt-4 flex flex-col gap-4 p-4 bg-slate-50 rounded-md border border-slate-200">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label htmlFor="find-similar-library-select" className="block text-sm font-medium text-slate-700 mb-1">Pesquisar na Biblioteca</label>
-                                                <select 
-                                                    id="find-similar-library-select" 
-                                                    value={findSimilarLibraryId} 
-                                                    onChange={e => setFindSimilarLibraryId(e.target.value)}
-                                                    disabled={libraries.length === 0}
-                                                    className="h-10 w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition disabled:bg-slate-100 disabled:cursor-not-allowed"
+                           <div className="border-l border-slate-200 dark:border-slate-700 pl-6 flex flex-col gap-4">
+                                <div>
+                                    <button 
+                                        onClick={() => setShowFindSimilarUI(!showFindSimilarUI)} 
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                    >
+                                        <MagnifyingGlassIcon className="w-5 h-5"/>
+                                        Localizar Similar em Segundo Plano
+                                    </button>
+                                    {showFindSimilarUI && (
+                                        <div className="mt-4 flex flex-col gap-4 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md border border-slate-200 dark:border-slate-700">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {IS_DEV_MODE && (
+                                                <div>
+                                                    <label htmlFor="find-similar-library-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Pesquisar na Biblioteca</label>
+                                                    <select 
+                                                        id="find-similar-library-select" 
+                                                        value={findSimilarLibraryId} 
+                                                        onChange={e => setFindSimilarLibraryId(e.target.value)}
+                                                        disabled={libraries.length === 0}
+                                                        className="h-10 w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-slate-900 dark:text-white"
+                                                    >
+                                                        <option value="none">Selecione uma biblioteca</option>
+                                                        {libraries.map(lib => (
+                                                            <option key={lib.id} value={lib.id}>{lib.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                )}
+                                                <div className={!IS_DEV_MODE ? 'md:col-span-2' : ''}>
+                                                    <label htmlFor="find-similar-description" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição Adicional (Opcional)</label>
+                                                    <textarea
+                                                        id="find-similar-description"
+                                                        value={findSimilarDescription}
+                                                        onChange={(e) => setFindSimilarDescription(e.target.value)}
+                                                        placeholder="Ex: luva resistente a cortes para manuseio de vidros"
+                                                        className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 dark:placeholder-slate-400 text-slate-900 dark:text-white"
+                                                        rows={2}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    onClick={handleFindSimilar} 
+                                                    disabled={IS_DEV_MODE && findSimilarLibraryId === 'none'} 
+                                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                                                 >
-                                                    <option value="none">Selecione uma biblioteca</option>
-                                                    {libraries.map(lib => (
-                                                        <option key={lib.id} value={lib.id}>{lib.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label htmlFor="find-similar-description" className="block text-sm font-medium text-slate-700 mb-1">Descrição Adicional (Opcional)</label>
-                                                <textarea
-                                                    id="find-similar-description"
-                                                    value={findSimilarDescription}
-                                                    onChange={(e) => setFindSimilarDescription(e.target.value)}
-                                                    placeholder="Ex: luva resistente a cortes para manuseio de vidros"
-                                                    className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition"
-                                                    rows={2}
-                                                />
+                                                    <SparklesIcon className="w-5 h-5"/>
+                                                    Iniciar Busca
+                                                </button>
                                             </div>
                                         </div>
-                                         <div className="flex justify-end">
-                                             <button 
-                                                onClick={handleFindSimilar} 
-                                                disabled={findSimilarLibraryId === 'none'} 
-                                                className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-                                            >
-                                                <SparklesIcon className="w-5 h-5"/>
-                                                Iniciar Busca
-                                            </button>
+                                    )}
+                                </div>
+                                <div>
+                                    <button 
+                                        onClick={() => setShowConversionUI(!showConversionUI)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 disabled:bg-teal-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                                    >
+                                        <ArrowPathIcon className="w-5 h-5" />
+                                        Sugerir Conversão de Produto
+                                    </button>
+                                    {showConversionUI && (
+                                        <div className="mt-4 flex flex-col gap-4 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md border border-slate-200 dark:border-slate-700">
+                                            {IS_DEV_MODE && (
+                                                <div>
+                                                    <label htmlFor="conversion-library-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base de Conhecimento (Nossos Produtos)</label>
+                                                    <select 
+                                                        id="conversion-library-select" 
+                                                        value={conversionLibraryId} 
+                                                        onChange={e => setConversionLibraryId(e.target.value)}
+                                                        disabled={libraries.length === 0}
+                                                        className="h-10 w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-slate-900 dark:text-white"
+                                                    >
+                                                        <option value="none">Selecione uma biblioteca</option>
+                                                        {libraries.map(lib => (
+                                                            <option key={lib.id} value={lib.id}>{lib.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    onClick={handleConversionSuggestion} 
+                                                    disabled={(IS_DEV_MODE && conversionLibraryId === 'none') || isConverting} 
+                                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 disabled:bg-teal-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                                >
+                                                    <SparklesIcon className="w-5 h-5"/>
+                                                    {isConverting ? 'Analisando...' : 'Analisar'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                            </div>
                         )}
 
                         {caData && comparisonData && (
-                            <div className="flex items-end gap-4 border-l border-slate-200 pl-6">
+                            <div className="flex items-end gap-4 border-l border-slate-200 dark:border-slate-700 pl-6">
                                 <button 
                                     onClick={handleAiAnalysis} 
                                     disabled={isAnalyzing || isLoading} 
@@ -548,30 +764,32 @@ ${fileContents.join('\n\n---\n\n')}
                                     <SparklesIcon className="w-5 h-5"/>
                                     {isAnalyzing ? 'Analisando...' : 'Analisar com IA'}
                                 </button>
-                                <div className="relative">
-                                    <label htmlFor="library-select" className="block text-sm font-medium text-slate-700 mb-1">Biblioteca de Conhecimento</label>
-                                    <select 
-                                        id="library-select" 
-                                        value={selectedLibraryId} 
-                                        onChange={e => setSelectedLibraryId(e.target.value)}
-                                        disabled={libraries.length === 0 || isAnalyzing || isLoading}
-                                        className="h-10 w-48 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition disabled:bg-slate-100 disabled:cursor-not-allowed"
-                                    >
-                                        <option value="none">Nenhuma</option>
-                                        {libraries.map(lib => (
-                                            <option key={lib.id} value={lib.id}>{lib.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                {IS_DEV_MODE && (
+                                    <div className="relative">
+                                        <label htmlFor="library-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Biblioteca de Conhecimento</label>
+                                        <select 
+                                            id="library-select" 
+                                            value={selectedLibraryId} 
+                                            onChange={e => setSelectedLibraryId(e.target.value)}
+                                            disabled={libraries.length === 0 || isAnalyzing || isLoading}
+                                            className="h-10 w-48 p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 transition bg-white dark:bg-slate-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-slate-900 dark:text-white"
+                                        >
+                                            <option value="none">Nenhuma</option>
+                                            {libraries.map(lib => (
+                                                <option key={lib.id} value={lib.id}>{lib.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
                     
                     {searchHistory.length > 0 && (
-                        <div className="mt-6 border-t border-slate-200 pt-4">
+                        <div className="mt-6 border-t border-slate-200 dark:border-slate-700 pt-4">
                             <div className="flex justify-between items-center mb-3">
-                                <h3 className="text-md font-semibold text-slate-600">Buscas Recentes</h3>
-                                <button onClick={handleClearHistory} className="text-sm text-slate-500 hover:text-slate-800 hover:underline transition-colors">
+                                <h3 className="text-md font-semibold text-slate-600 dark:text-slate-300">Buscas Recentes</h3>
+                                <button onClick={handleClearHistory} className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:underline transition-colors">
                                     Limpar histórico
                                 </button>
                             </div>
@@ -583,7 +801,7 @@ ${fileContents.join('\n\n---\n\n')}
                                             setCaNumberInput(ca);
                                             handleFetchAndParse(ca, 'primary');
                                         }}
-                                        className="px-3 py-1 bg-slate-100 text-slate-700 text-sm font-medium rounded-full hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 transition"
+                                        className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800 transition"
                                         title={`Buscar CA ${ca}`}
                                     >
                                         {ca}
@@ -596,8 +814,8 @@ ${fileContents.join('\n\n---\n\n')}
 
                 {isLoading && (
                      <div className="flex flex-col justify-center items-center p-10 gap-4">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600"></div>
-                        {loadingMessage && <p className="text-slate-600 font-semibold">{loadingMessage}</p>}
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 dark:border-sky-500"></div>
+                        {loadingMessage && <p className="text-slate-600 dark:text-slate-400 font-semibold">{loadingMessage}</p>}
                      </div>
                 )}
                 
@@ -625,14 +843,30 @@ ${fileContents.join('\n\n---\n\n')}
                 {(isAnalyzing || analysisResult || analysisError) && (
                     <AIAnalysisCard isLoading={isAnalyzing} analysis={analysisResult} error={analysisError} loadingMessage={analysisLoadingMessage} />
                 )}
+
+                {(isConverting || conversionResult || conversionError) && (
+                    <ConversionSuggestionCard isLoading={isConverting} result={conversionResult} error={conversionError} loadingMessage={conversionLoadingMessage} />
+                )}
             </main>
-            <SettingsModal 
-                isOpen={isSettingsModalOpen}
-                onClose={() => setIsSettingsModalOpen(false)}
-                libraries={libraries}
-                onSaveLibrary={handleSaveLibrary}
-                onDeleteLibrary={handleDeleteLibrary}
-                onImportLibraries={handleImportLibraries}
+            {IS_DEV_MODE && (
+                <SettingsModal 
+                    isOpen={isSettingsModalOpen}
+                    onClose={() => setIsSettingsModalOpen(false)}
+                    libraries={libraries}
+                    onSaveLibrary={handleSaveLibrary}
+                    onDeleteLibrary={handleDeleteLibrary}
+                    onImportLibraries={handleImportLibraries}
+                    onShowConfirmation={showConfirmation}
+                />
+            )}
+            <ConfirmationDialog 
+                isOpen={confirmation.isOpen}
+                title={confirmation.title}
+                message={confirmation.message}
+                onConfirm={confirmation.onConfirm}
+                onCancel={hideConfirmation}
+                confirmButtonText={confirmation.confirmButtonText}
+                confirmButtonColor={confirmation.confirmButtonColor}
             />
         </div>
     );

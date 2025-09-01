@@ -1,33 +1,42 @@
 import React, { useState } from 'react';
-import { SparklesIcon, ClipboardDocumentIcon, CheckCircleIcon } from './Icon';
+import { ClipboardDocumentIcon, CheckCircleIcon, ArrowPathIcon } from './Icon';
 
-interface AIAnalysisCardProps {
-  analysis: string | null;
+interface ConversionSuggestionCardProps {
+  result: string | null;
   isLoading: boolean;
   error: string | null;
   loadingMessage?: string;
 }
 
 const parseMarkdown = (text: string): string => {
-    // This simple parser handles the specific markdown format from the AI.
-    return text
-      .replace(/^### (.*?)$/gm, '<h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">$1</h3>')
-      .replace(/^- \*\*(.*?):\*\* (.*?)$/gm, '<ul><li class="ml-5 list-disc mb-1"><strong>$1:</strong> $2</li></ul>')
-      .replace(/^- (.*?)$/gm, '<ul><li class="ml-5 list-disc mb-1">$1</li></ul>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br />')
-      .replace(/(<br \/>)+/g, '<br />')
-      .replace(/<ul><br \/>/g, '<ul>')
-      .replace(/<\/ul><br \/><ul>/g, '');
+  // This parser handles the specific markdown format from the conversion suggestion AI.
+  let html = text
+    // 1. **Title:** content
+    .replace(/^\s*\d\.\s+\*\*(.*?):\*\*(.*)$/gm, (match, title, content) => {
+        return `<h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">${title.trim()}</h3><p class="text-slate-700 dark:text-slate-300">${content.trim()}</p>`;
+    })
+    // - bullet point
+    .replace(/^- (.*?)$/gm, '<ul class="list-disc list-inside mt-2"><li class="mb-1">$1</li></ul>')
+    // **bold**
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // newlines
+    .replace(/\n/g, '<br />');
+
+  // Clean up extra line breaks and merge adjacent lists
+  html = html
+    .replace(/(<br \/>\s*)+/g, '<br />')
+    .replace(/<\/ul><br \/><ul>/g, '');
+
+  return html;
 };
 
 
-export const AIAnalysisCard: React.FC<AIAnalysisCardProps> = ({ analysis, isLoading, error, loadingMessage }) => {
+export const ConversionSuggestionCard: React.FC<ConversionSuggestionCardProps> = ({ result, isLoading, error, loadingMessage }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    if (analysis) {
-      navigator.clipboard.writeText(analysis)
+    if (result) {
+      navigator.clipboard.writeText(result)
         .then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
@@ -40,10 +49,10 @@ export const AIAnalysisCard: React.FC<AIAnalysisCardProps> = ({ analysis, isLoad
     return (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
             <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-600 dark:border-sky-500"></div>
-                <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-200">{loadingMessage || 'Analisando com IA...'}</h2>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 dark:border-teal-500"></div>
+                <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-200">{loadingMessage || 'Analisando para conversão...'}</h2>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 mt-2">Aguarde um momento enquanto a inteligência artificial compara os dois equipamentos.</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-2">Aguarde um momento enquanto a inteligência artificial busca um produto compatível em sua base de conhecimento.</p>
         </div>
     );
   }
@@ -51,23 +60,23 @@ export const AIAnalysisCard: React.FC<AIAnalysisCardProps> = ({ analysis, isLoad
   if (error) {
     return (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md mt-8" role="alert">
-            <p><strong>Erro na Análise:</strong> {error}</p>
+            <p><strong>Erro na Sugestão de Conversão:</strong> {error}</p>
         </div>
     );
   }
   
-  if (!analysis) {
+  if (!result) {
     return null;
   }
 
-  const formattedHtml = parseMarkdown(analysis);
+  const formattedHtml = parseMarkdown(result);
 
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
           <div className="flex items-center gap-3">
-            <SparklesIcon className="w-8 h-8 text-sky-500"/>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Análise Comparativa por IA</h2>
+            <ArrowPathIcon className="w-8 h-8 text-teal-500"/>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Sugestão de Conversão</h2>
           </div>
           <button 
              onClick={handleCopy}
