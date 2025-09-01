@@ -1,4 +1,5 @@
 
+
 export interface CAData {
   caNumber: string;
   status: string;
@@ -43,11 +44,20 @@ export interface SimilarityJob {
   libraryName: string;
   description: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  result?: string;
+  result?: string; // Will now be a JSON string of ParsedSimilarityResult[]
   error?: string;
   createdAt: number; // timestamp
   completedAt?: number; // timestamp
   progress?: number;
   totalFiles?: number;
   progressMessage?: string;
+}
+
+export interface ParsedSimilarityResult {
+  productName: string;
+  caNumber?: string;
+  confidence: number; // e.g., 95 for 95%
+  justification: string;
+  detailedJustification: string;
+  imageUrl?: string;
 }

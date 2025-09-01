@@ -3,7 +3,7 @@
 // We need to declare self as a ServiceWorkerGlobalScope to access its methods
 declare const self: ServiceWorkerGlobalScope;
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import * as idb from './services/idbService';
 import { fetchUrlAsText, generateContentWithRetry } from './services/apiService';
 
@@ -158,11 +158,6 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             const file = libraryFiles[i];
             const fileContent = await fetchUrlAsText(file.url);
             
-            // If fetching the content failed, abort the entire job.
-            if (fileContent.startsWith('[Erro')) {
-                throw new Error(fileContent);
-            }
-            
             const perFilePrompt = `
                 Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
                 
@@ -193,8 +188,7 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
                 individualResults.push(`Análise do documento ${file.url}:\n${response.text}`);
             } catch (fileError) {
                 console.error(`Failed to analyze file ${file.url} after retries:`, fileError);
-                // Throw an error to stop the entire job process and mark it as failed.
-                throw new Error(`A análise do documento ${file.url} falhou após múltiplas tentativas.`);
+                individualResults.push(`[ERRO] A análise do documento ${file.url} falhou após múltiplas tentativas.`);
             }
             
             job.progress = i + 1;
@@ -208,9 +202,9 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             return;
         }
 
-        // 3. Final synthesis
+        // 3. Final synthesis with JSON response
         const synthesisPrompt = `
-            Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência.
+            Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
             **EPI de Referência (CA ${caData.caNumber}):**
             \`\`\`json
@@ -226,25 +220,65 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             ---
 
             **Instruções Finais:**
-            1.  Com base nos resultados individuais, identifique até **3 EPIs mais similares** ao de referência.
+            1.  Com base nos resultados individuais, identifique até **5 EPIs mais similares** ao de referência.
             2.  **Dê prioridade máxima à "Descrição Adicional" do usuário ao classificar a similaridade.**
-            3.  Ordene-os do mais similar para o menos similar.
-            4.  Para cada sugestão, forneça:
-                - **Equipamento Similar:** O nome, CA, ou identificador claro.
-                - **Confiança da Similaridade:** Uma estimativa em porcentagem (ex: 95%) de quão confiante você está na correspondência.
-                - **Justificativa:** Uma explicação detalhada e consolidada do porquê o item é similar, citando as características principais e como ele atende à descrição adicional.
-            5.  Formate a resposta final em Markdown. Comece cada item com '###' seguido do número e nome do equipamento (ex: ### 1. Luva Pro-Safety Max).
-            6.  Se nenhum equipamento similar relevante foi encontrado em todas as análises, responda apenas: "Nenhum equipamento similar foi encontrado na base de conhecimento fornecida."
+            3.  Ordene-os do mais similar para o menos similar na sua resposta final.
+            4.  Para cada sugestão, preencha todos os campos do schema JSON solicitado:
+                - **justification**: Uma frase **curta e direta** resumindo o motivo da similaridade. Ex: "Ambos são calçados de segurança S3 com biqueira de composite."
+                - **detailedJustification**: Uma análise mais completa em **Markdown**, explicando os prós e contras, comparando materiais, normas e indicações de uso. Use listas para clareza.
+            5.  **Tente extrair a URL completa de uma imagem do produto se houver uma claramente associada a ele nos documentos.** Se não encontrar, deixe o campo em branco.
+            6.  Se nenhum equipamento similar relevante foi encontrado em todas as análises, retorne um array JSON vazio.
         `;
+
+        const responseSchema = {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              productName: {
+                type: Type.STRING,
+                description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
+              },
+              caNumber: {
+                type: Type.STRING,
+                description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
+              },
+              confidence: {
+                type: Type.NUMBER,
+                description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
+              },
+              justification: {
+                type: Type.STRING,
+                description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
+              },
+              detailedJustification: {
+                type: Type.STRING,
+                description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
+              },
+              imageUrl: {
+                type: Type.STRING,
+                description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
+              }
+            },
+            required: ["productName", "confidence", "justification", "detailedJustification"]
+          }
+        };
         
-        const finalResponse = await generateContentWithRetry(ai, { model: 'gemini-2.5-flash', contents: synthesisPrompt }, 3, (attempt) => {
+        const finalResponse = await generateContentWithRetry(ai, {
+            model: 'gemini-2.5-flash',
+            contents: synthesisPrompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            }
+        }, 3, (attempt) => {
             job.progressMessage = `Realizando síntese final (Tentativa ${attempt}/3)...`;
             idb.updateJob(job);
         });
         
         // 4. Update job as completed
         job.status = 'completed';
-        job.result = finalResponse.text;
+        job.result = finalResponse.text; // This will be a JSON string
         job.completedAt = Date.now();
         job.progress = job.totalFiles;
         job.progressMessage = "Finalizado";
