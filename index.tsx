@@ -1,8 +1,6 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import AppRoutes from './routes';
+import { Router as AppRoutes } from './routes';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -23,8 +21,6 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <AppRoutes />
   </React.StrictMode>
 );

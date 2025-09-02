@@ -1,5 +1,3 @@
-
-
 export interface CAData {
   caNumber: string;
   status: string;
@@ -60,4 +58,15 @@ export interface ParsedSimilarityResult {
   justification: string;
   detailedJustification: string;
   imageUrl?: string;
+}
+
+export type Theme = 'light' | 'dark';
+
+export interface ConfirmationState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmButtonText?: string;
+    confirmButtonColor?: string;
 }
