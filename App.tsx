@@ -7,8 +7,6 @@ import { SettingsModal } from './components/SettingsModal';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { Theme, Library } from './types';
 import { LibraryService } from './services/libraryService';
-import Dashboard from './pages/Dashboard';
-
 const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -91,7 +89,7 @@ const App: React.FC = () => {
                 user={user} 
             />
             <main className="container mx-auto p-4">
-                {user ? <Dashboard uid={user.uid} /> : <Outlet />}
+                <Outlet context={{ user }} />
             </main>
             <SettingsModal
                 isOpen={isSettingsModalOpen}
