@@ -1,6 +1,6 @@
 
 import { db, auth } from '../firebase';
-import { collection, query, orderBy, limit, getDocs, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, addDoc, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
 
 export class HistoryService {
     private static getHistoryCollectionRef(uid: string) {
@@ -31,14 +31,29 @@ export class HistoryService {
             return;
         }
         try {
-            console.log(`HistoryService: Adding search history for UID: ${uid}, CA: ${caNumber}`);
-            await addDoc(this.getHistoryCollectionRef(uid), {
-                caNumber,
-                timestamp: serverTimestamp()
-            });
-            console.log("HistoryService: Search history added successfully.");
+            console.log(`HistoryService: Attempting to add/update search history for UID: ${uid}, CA: ${caNumber}`);
+
+            const q = query(this.getHistoryCollectionRef(uid), where("caNumber", "==", caNumber));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                // If CA number exists, update its timestamp
+                querySnapshot.docs.forEach(async (doc) => {
+                    await updateDoc(doc.ref, {
+                        timestamp: serverTimestamp()
+                    });
+                });
+                console.log(`HistoryService: Updated timestamp for existing CA: ${caNumber}`);
+            } else {
+                // If CA number does not exist, add a new document
+                await addDoc(this.getHistoryCollectionRef(uid), {
+                    caNumber,
+                    timestamp: serverTimestamp()
+                });
+                console.log(`HistoryService: Added new search history entry for CA: ${caNumber}`);
+            }
         } catch (e) {
-             console.error("HistoryService: Failed to save search history to Firestore", e);
+             console.error("HistoryService: Failed to save/update search history to Firestore", e);
         }
     }
 

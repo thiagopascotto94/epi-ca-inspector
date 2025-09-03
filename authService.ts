@@ -3,9 +3,11 @@ import {
   createUserWithEmailAndPassword, 
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithPopup,
   User
 } from "firebase/auth";
-import { auth } from "./firebase";
+import { auth, googleProvider } from "./firebase";
 
 export class AuthService {
   static onAuthStateChanged(callback: (user: User | null) => void) {
@@ -18,6 +20,16 @@ export class AuthService {
       return userCredential.user;
     } catch (error) {
       console.error("Erro no login:", error);
+      throw error;
+    }
+  }
+
+  static async loginWithGoogle(): Promise<User> {
+    try {
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      return userCredential.user;
+    } catch (error) {
+      console.error("Erro no login com o Google:", error);
       throw error;
     }
   }
@@ -47,5 +59,14 @@ export class AuthService {
 
   static isAuthenticated(): boolean {
     return auth.currentUser !== null;
+  }
+
+  static async resetPassword(email: string): Promise<void> {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error("Erro ao enviar e-mail de redefinição de senha:", error);
+      throw error;
+    }
   }
 }

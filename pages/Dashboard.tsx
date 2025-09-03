@@ -216,7 +216,7 @@ export default function Dashboard({ uid }: DashboardProps) {
                 isConverting={isConverting}
             />
 
-            {caData && <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(uid); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />}
+            <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(uid); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />
 
             <div className={`grid grid-cols-1 gap-8 ${caData && !comparisonData ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
                 {caData && <div><CADetailCard data={caData} /></div>}

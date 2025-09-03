@@ -86,7 +86,7 @@ export class CAScraperService {
     static async fetchAndParse(caNumber: string, onProgress: (message: string) => void): Promise<CAData> {
         onProgress('Construindo URL...');
         const url = `https://consultaca.com/${caNumber}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
 
         try {
             onProgress('Buscando dados...');

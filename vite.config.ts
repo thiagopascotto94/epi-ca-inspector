@@ -12,6 +12,11 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      server: {
+        headers: {
+          'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        }
       }
     };
 });
