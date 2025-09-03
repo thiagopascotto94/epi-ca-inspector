@@ -1,7 +1,7 @@
 import { db } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc } from 'firebase/firestore';
 import { Library } from '../types';
-import { encode } from 'gpt-3-encoder';
+import { get_encoding } from 'tiktoken';
 
 export class LibraryService {
     private static getLibraryCollectionRef(uid: string) {
@@ -45,7 +45,8 @@ export class LibraryService {
             if (usageSnap.exists()) {
                 const currentUsage = usageSnap.data() as { bytes: number, tokens: number };
                 const content = library.files[0]?.content || '';
-                const tokens = encode(content).length;
+                const enc = get_encoding("cl100k_base");
+                const tokens = enc.encode(content).length;
                 const bytes = new TextEncoder().encode(content).length;
 
                 batch.update(usageDocRef, {

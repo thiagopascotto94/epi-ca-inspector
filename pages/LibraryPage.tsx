@@ -7,7 +7,7 @@ import { UsageService } from '../services/usageService';
 import { fetchUrlAsText } from '../services/apiService';
 import CreateLibraryDialog from '../components/CreateLibraryDialog';
 import EditLibraryDialog from '../components/EditLibraryDialog';
-import { encode } from 'gpt-3-encoder';
+import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 
 const LibraryPage: React.FC = () => {
@@ -34,7 +34,8 @@ const LibraryPage: React.FC = () => {
         setIsLoading(true);
         try {
             const content = await fetchUrlAsText(url);
-            const tokens = encode(content).length;
+            const enc = get_encoding("cl100k_base");
+            const tokens = enc.encode(content).length;
             const bytes = new TextEncoder().encode(content).length;
             const hasEnoughSpace = await UsageService.hasEnoughSpace(user.uid, bytes, tokens);
             if (!hasEnoughSpace) {
@@ -70,11 +71,12 @@ const LibraryPage: React.FC = () => {
         setIsLoading(true);
 
         try {
+            const enc = get_encoding("cl100k_base");
             const oldContent = library.files[0].content || '';
-            const oldTokens = encode(oldContent).length;
+            const oldTokens = enc.encode(oldContent).length;
             const oldBytes = new TextEncoder().encode(oldContent).length;
 
-            const newTokens = encode(newContent).length;
+            const newTokens = enc.encode(newContent).length;
             const newBytes = new TextEncoder().encode(newContent).length;
 
             const currentUsage = await UsageService.getUsage(user.uid);
