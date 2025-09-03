@@ -5,8 +5,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
       },
       resolve: {
         alias: {
@@ -17,6 +16,23 @@ export default defineConfig(({ mode }) => {
         headers: {
           'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
         }
-      }
+      },
+      build: { // Add this build configuration
+        rollupOptions: {
+          input: {
+            main: path.resolve(__dirname, 'index.html'), // Your main entry point
+            sw: path.resolve(__dirname, 'sw.ts'), // Add sw.ts as a separate entry point
+          },
+          output: {
+            entryFileNames: (chunkInfo) => {
+              // This ensures sw.ts is output as sw.js
+              if (chunkInfo.name === 'sw') {
+                return '[name].js';
+              }
+              return 'assets/[name]-[hash].js';
+            },
+          },
+        },
+      },
     };
 });

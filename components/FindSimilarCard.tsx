@@ -89,7 +89,9 @@ export const FindSimilarCard: React.FC<FindSimilarCardProps> = ({ result, isLoad
     return sortableItems;
   }, [parsedResult, sortConfig]);
 
-  const progressPercentage = totalFiles > 0 ? (progress / (totalFiles + 1)) * 100 : 0;
+  const progressPercentage = totalFiles > 0
+    ? Math.min(100, (progress / (2 * totalFiles)) * 100) // Cap at 100%
+    : 0;
 
   const defaultProgressMessage = progress <= totalFiles && totalFiles > 0
     ? `Analisando arquivo ${progress} de ${totalFiles}...` 
@@ -123,10 +125,6 @@ export const FindSimilarCard: React.FC<FindSimilarCardProps> = ({ result, isLoad
             <p><strong>Erro na Busca por Similar:</strong> {error}</p>
         </div>
     );
-  }
-  
-  if (!result) {
-    return null;
   }
   
   const SortIndicator = ({ columnKey }: { columnKey: SortableKeys }) => {
@@ -295,3 +293,7 @@ export const FindSimilarCard: React.FC<FindSimilarCardProps> = ({ result, isLoad
     </div>
   );
 };
+
+  
+  
+  

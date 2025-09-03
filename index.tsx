@@ -5,7 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    const swUrl = import.meta.env.DEV ? '/sw.ts' : '/sw.js';
+    const swUrl = '/sw.js'; // Always register sw.js
     navigator.serviceWorker.register(swUrl, { type: 'module' }).then(registration => {
       console.log('SW registered: ', registration);
     }).catch(registrationError => {

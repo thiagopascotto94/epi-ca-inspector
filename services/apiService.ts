@@ -3,7 +3,7 @@ import { GoogleGenAI, GenerateContentParameters, GenerateContentResponse } from 
 
 export const fetchUrlAsText = async (url: string): Promise<string> => {
     try {
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
         const response = await fetch(proxyUrl);
         if (!response.ok) {
             console.warn(`Failed to fetch ${url}: ${response.statusText}`);
@@ -21,6 +21,33 @@ export const fetchUrlAsText = async (url: string): Promise<string> => {
         console.warn(`Exception while fetching ${url}:`, e);
         return `[Erro ao buscar conteúdo de ${url}]`;
     }
+};
+
+export const fetchUrlAsTextWithRetry = async (
+    url: string,
+    maxRetries: number = 3,
+    onAttempt?: (attempt: number) => void
+): Promise<string> => {
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            if (onAttempt) {
+                onAttempt(attempt);
+            }
+            const content = await fetchUrlAsText(url);
+            if (content.startsWith("[Erro ao buscar conteúdo de")) {
+                throw new Error(`Failed to fetch content for ${url}`);
+            }
+            return content; // Success
+        } catch (e) {
+            lastError = e as Error;
+            console.warn(`Fetch attempt ${attempt} for ${url} failed:`, e);
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000)); // Wait with jitter
+            }
+        }
+    }
+    throw lastError!;
 };
 
 export const generateContentWithRetry = async (

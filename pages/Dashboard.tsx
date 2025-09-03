@@ -79,6 +79,63 @@ export default function Dashboard({ uid }: DashboardProps) {
         loadInitialData();
     }, [uid]);
 
+    // New useEffect for Service Worker messages
+    useEffect(() => {
+        if ('serviceWorker' in navigator) {
+            const messageHandler = async (event: MessageEvent) => {
+                if (event.data && event.data.type === 'JOB_UPDATED') {
+                    const { jobId } = event.data.payload;
+                    const updatedJobs = await JobService.getAllJobs(uid);
+                    const updatedJob = updatedJobs.find(j => j.id === jobId);
+
+                    if (updatedJob) {
+                        setJobs(updatedJobs); // Update the list of all jobs
+
+                        // Update specific states for FindSimilarCard if it's the active job
+                        if (updatedJob.status === 'processing' || updatedJob.status === 'pending') {
+                            setIsFindingSimilar(true);
+                            setFindSimilarProgress(updatedJob.progress || 0);
+                            setFindSimilarTotalFiles(updatedJob.totalFiles || 0);
+                            setFindSimilarProgressMessage(updatedJob.progressMessage || '');
+                        } else if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
+                            setIsFindingSimilar(false);
+                            setFindSimilarProgress(updatedJob.totalFiles || 0); // Set to total on completion/failure
+                            setFindSimilarProgressMessage(updatedJob.progressMessage || '');
+                            if (updatedJob.status === 'completed') {
+                                setFindSimilarResult(updatedJob.result || null);
+                            } else {
+                                setFindSimilarError(updatedJob.error || null);
+                            }
+                        }
+                    }
+                }
+            };
+
+            navigator.serviceWorker.addEventListener('message', messageHandler);
+
+            return () => {
+                navigator.serviceWorker.removeEventListener('message', messageHandler);
+            };
+        }
+    }, [uid]); // Depend on uid to re-register listener if uid changes
+
+    // New useEffect for beforeunload confirmation
+    useEffect(() => {
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (isFindingSimilar) {
+                event.preventDefault();
+                event.returnValue = ''; // Required for Chrome
+                return ''; // Required for other browsers
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [isFindingSimilar]); // Depend on isFindingSimilar to re-register if job status changes
+
     const handleFetchAndParse = async (caNumber: string, target: 'primary' | 'secondary') => {
         if (!caNumber) return;
 
@@ -144,15 +201,25 @@ export default function Dashboard({ uid }: DashboardProps) {
             setShowFindSimilarUI(false);
 
             // Notify service worker to start processing the job
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'START_SIMILARITY_JOB',
-                    payload: {
-                        jobId: newJob.id,
-                        apiKey: process.env.VITE_FIREBASE_API_KEY, // Use VITE_ prefix for Vite env vars
-                        uid: uid
-                    }
-                });
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.ready; // Wait for the service worker to be ready
+                if (registration.active) { // Ensure there's an active worker
+                    registration.active.postMessage({ // Use registration.active to post message
+                        type: 'START_SIMILARITY_JOB',
+                        payload: {
+                            jobId: newJob.id,
+                            apiKey: process.env.VITE_FIREBASE_API_KEY, // Use VITE_ prefix for Vite env vars
+                            uid: uid,
+                            geminiApiKey: process.env.VITE_GEMINI_API_KEY // New: Pass Gemini API Key
+                        }
+                    });
+                } else {
+                    console.warn('Service Worker is not active. Cannot send START_SIMILARITY_JOB message.');
+                    setFindSimilarError('Service Worker is not active. Please refresh the page.');
+                }
+            } else {
+                console.warn('Service Worker API not supported in this browser.');
+                setFindSimilarError('Service Worker API not supported in this browser.');
             }
 
         } catch (error: any) {

@@ -27,6 +27,7 @@ export interface CAData {
 export interface LibraryFile {
   id: string;
   url: string;
+  content?: string;
 }
 
 export interface Library {

@@ -14,7 +14,7 @@ export class CaFetchingService {
             try {
                 onProgress(`Buscando... (Tentativa ${attempt}/${MAX_RETRIES})`);
                 
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://consultaca.com/${caNumber}`)}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://consultaca.com/${caNumber}`)}`;
                 const response = await fetch(proxyUrl);
 
                 if (!response.ok) {

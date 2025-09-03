@@ -1,24 +1,25 @@
 /// <reference lib="webworker" />
 
-declare const self: ServiceWorkerGlobalScope;
+declare const self: ServiceWorkerGlobalScope & { geminiApiKey?: string };
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, updateDoc, collection, query, orderBy, getDocs } from "firebase/firestore";
+import { getAuth, signInWithCredential, GoogleAuthProvider } from "firebase/auth";
 import { fetchUrlAsText, generateContentWithRetry } from './services/apiService';
 import { SimilarityJob } from './types';
 
 // --- Firebase Initialization ---
-// Firebase config will be passed from the client when a job starts
 let firebaseApp: any = null;
 let db: any = null;
+let auth: any = null;
 
 function initializeFirebase(apiKey: string, uid: string) {
-    if (firebaseApp) return; // Already initialized
+    if (firebaseApp) return;
 
     const firebaseConfig = {
-        apiKey: apiKey,
-        authDomain: "epi-ca-inspector.firebaseapp.com", // These can be hardcoded or passed
+        apiKey: 'AIzaSyBd_ODcBhUbiLkQ-GBgemIlDkGZDQ4IcFw',
+        authDomain: "epi-ca-inspector.firebaseapp.com",
         projectId: "epi-ca-inspector",
         storageBucket: "epi-ca-inspector.appspot.com",
         messagingSenderId: "88060391632",
@@ -27,7 +28,72 @@ function initializeFirebase(apiKey: string, uid: string) {
 
     firebaseApp = initializeApp(firebaseConfig);
     db = getFirestore(firebaseApp);
+    auth = getAuth(firebaseApp);
 }
+
+// --- IndexedDB Setup ---
+const DB_NAME = 'EPIInspectorDB';
+const STORE_NAME = 'jobFiles';
+
+function openIndexedDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+
+        request.onupgradeneeded = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+            }
+        };
+
+        request.onsuccess = (event) => {
+            resolve((event.target as IDBOpenDBRequest).result);
+        };
+
+        request.onerror = (event) => {
+            reject('IndexedDB error: ' + (event.target as IDBRequest).error);
+        };
+    });
+}
+
+async function getFileContentFromIndexedDB(fileId: string): Promise<string | null> {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(fileId);
+
+        request.onsuccess = () => {
+            if (request.result) {
+                resolve(request.result.content);
+            } else {
+                resolve(null);
+            }
+        };
+
+        request.onerror = (event) => {
+            reject('IndexedDB get error: ' + (event.target as IDBRequest).error);
+        };
+    });
+}
+
+async function putFileContentInIndexedDB(fileId: string, content: string): Promise<void> {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put({ id: fileId, content: content });
+
+        request.onsuccess = () => {
+            resolve();
+        };
+
+        request.onerror = (event) => {
+            reject('IndexedDB put error: ' + (event.target as IDBRequest).error);
+        };
+    });
+}
+
 
 // --- State for Queue and Cancellation ---
 let isJobRunning = false;
@@ -38,28 +104,25 @@ const cancelledJobIds = new Set<string>();
 // SW Lifecycle: Install
 self.addEventListener('install', (event) => {
     console.log('Service Worker: Installing...');
-    event.waitUntil(self.skipWaiting()); // Activate worker immediately
+    event.waitUntil(self.skipWaiting());
 });
 
 // SW Lifecycle: Activate
 self.addEventListener('activate', (event) => {
     console.log('Service Worker: Activating...');
-    event.waitUntil(self.clients.claim()); // Become available to all pages
+    event.waitUntil(self.clients.claim());
 });
 
 // Notification Click Handler
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    // This looks for an existing window and focuses it, or opens a new one.
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            // If a client is already open, focus it.
             for (const client of clientList) {
                 if ('focus' in client) {
                     return client.focus();
                 }
             }
-            // Otherwise, open a new window.
             if (self.clients.openWindow) {
                 return self.clients.openWindow('/');
             }
@@ -68,12 +131,26 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // Listen for messages from the main application
-self.addEventListener('message', (event) => {
+self.addEventListener('message', async (event) => {
     if (event.data && event.data.type === 'START_SIMILARITY_JOB') {
-        const { jobId, apiKey, uid } = event.data.payload;
+        const { jobId, apiKey, uid, idToken, geminiApiKey } = event.data.payload; // Added geminiApiKey
+        console.log(`Service Worker: key ${geminiApiKey}.`);
         console.log(`Service Worker: Received job ${jobId}, adding to queue.`);
         initializeFirebase(apiKey, uid);
         currentUid = uid;
+        self.geminiApiKey = geminiApiKey; // Store geminiApiKey in SW global scope
+
+        if (auth && idToken) {
+            try {
+                await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+                console.log('Service Worker: Signed in with ID token.');
+            } catch (error) {
+                console.error('Service Worker: Error signing in with ID token:', error);
+                return;
+            }
+        } else {
+            console.warn('Service Worker: No auth instance or ID token provided. Firestore access might fail.');
+        }
         processQueue();
     } else if (event.data && event.data.type === 'CANCEL_SIMILARITY_JOB') {
         const { jobId } = event.data.payload;
@@ -98,28 +175,23 @@ async function processQueue() {
     const querySnapshot = await getDocs(q);
     const allJobs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimilarityJob));
 
-    // Find the oldest pending job
-    const nextJob = allJobs.filter(j => j.status === 'pending')[0];
+    const nextJob = allJobs.find(j => j.status === 'pending');
 
     if (!nextJob) {
         console.log('SW: No pending jobs in the queue.');
         return;
     }
 
-    // Check if this job was cancelled while it was pending
     if (cancelledJobIds.has(nextJob.id)) {
         console.log(`SW: Skipping cancelled pending job ${nextJob.id}`);
-        // The job will be deleted by the client, we just need to clean up our set
         cancelledJobIds.delete(nextJob.id);
-        // Immediately check for the next job in the queue
-        setTimeout(processQueue, 0); 
+        setTimeout(processQueue, 0);
         return;
     }
     
     isJobRunning = true;
     console.log(`SW: Starting job ${nextJob.id}`);
 
-    // Run the job, and when it's done (success or fail), unset the flag and process the next one.
     runSimilarityJob(nextJob.id, currentUid)
         .catch(err => {
             console.error(`SW: Unhandled error in runSimilarityJob for ${nextJob.id}`, err);
@@ -127,8 +199,7 @@ async function processQueue() {
         .finally(() => {
             isJobRunning = false;
             console.log(`SW: Finished job processing for ${nextJob.id}. Checking for next job.`);
-            // Use a timeout to avoid a potential tight loop and allow other microtasks to run.
-            setTimeout(processQueue, 100); 
+            setTimeout(processQueue, 100);
         });
 }
 
@@ -151,7 +222,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
 
     if (!job) {
         console.error(`Job ${jobId} not found in Firestore.`);
-        cancelledJobIds.delete(jobId); // Clean up
+        cancelledJobIds.delete(jobId);
         return;
     }
 
@@ -166,74 +237,95 @@ async function runSimilarityJob(jobId: string, uid: string) {
             return;
         }
 
-        // 1. Set status to processing
         await updateDoc(jobDocRef, {
             status: 'processing',
             progress: 0,
             progressMessage: 'Iniciando análise...'
         });
-        job.status = 'processing'; // Update local job object
+        job.status = 'processing';
         job.progress = 0;
         job.progressMessage = 'Iniciando análise...';
         await postJobUpdate(job.id);
 
-        const ai = new GoogleGenAI({ apiKey: firebaseApp.options.apiKey });
+        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || firebaseApp.options.apiKey });
         const { caData, libraryFiles, description, libraryName } = job;
-        const individualResults: string[] = [];
         
         const totalFiles = libraryFiles.length;
         await updateDoc(jobDocRef, { totalFiles: totalFiles });
-        job.totalFiles = totalFiles; // Update local job object
+        job.totalFiles = totalFiles;
 
-        // 2. Analyze each file
+        // 1. Download and store files in IndexedDB
         for (let i = 0; i < totalFiles; i++) {
-             if (cancelledJobIds.has(jobId)) {
-                console.log(`Job ${jobId} cancelled during file processing.`);
+            if (cancelledJobIds.has(jobId)) {
+                console.log(`Job ${jobId} cancelled during file download.`);
                 cleanup();
                 return;
             }
-
             const file = libraryFiles[i];
-            const fileContent = await fetchUrlAsText(file.url);
-            
-                        const perFilePrompt =
-                            `Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
-            
-                            **EPI de Referência (CA ${caData.caNumber}):**
-                            \`\`\`json
-                            ${JSON.stringify({ name: caData.equipmentName, approvedFor: caData.approvedFor, description: caData.description }, null, 2)}
-                            \`\`\`
-                            ${description.trim() ?
-                                `**Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
-                            ${description.trim()}`
-                                : ''
-                            }
-                            **Conteúdo do Documento (Fonte: ${file.url}):**
-                            ---
-                            ${fileContent}
-                            ---
-            
-                            **Sua Tarefa:**
-                            Se encontrar um EPI similar no documento, descreva-o sucintamente, incluindo seu nome/identificador e a principal razão da similaridade. Dê forte preferência à "Descrição Adicional" se ela for fornecida.
-                            Se nenhum similar for encontrado, responda "Nenhum EPI similar encontrado neste documento.".
-                            Seja breve e objetivo.
-                            `;
-            
+            const fileId = `${jobId}-${i}`;
+
             try {
-                const response = await generateContentWithRetry(ai, { model: 'gemini-2.5-flash', contents: perFilePrompt }, 3, (attempt) => {
-                    updateDoc(jobDocRef, { progressMessage: `Analisando arquivo ${i + 1}/${totalFiles} (Tentativa ${attempt}/3)...` });
+                await updateDoc(jobDocRef, {
+                    progress: i,
+                    progressMessage: `Baixando arquivo ${i + 1}/${totalFiles}: ${file.url}`
                 });
-                individualResults.push(`Análise do documento ${file.url}:\n${response.text}`);
-            } catch (fileError) {
-                console.error(`Failed to analyze file ${file.url} after retries:`, fileError);
-                individualResults.push(`[ERRO] A análise do documento ${file.url} falhou após múltiplas tentativas.`);
+                await postJobUpdate(job.id);
+
+                const fileContent = await fetchUrlAsText(file.url);
+                await putFileContentInIndexedDB(fileId, fileContent);
+                console.log(`File ${file.url} (ID: ${fileId}) downloaded and stored in IndexedDB.`);
+
+            } catch (downloadError) {
+                console.error(`Error downloading or storing file ${file.url} (ID: ${fileId}):`, downloadError);
+                await updateDoc(jobDocRef, {
+                    status: 'failed',
+                    error: `Falha ao baixar ou armazenar o arquivo ${file.url}: ${(downloadError as Error).message}`,
+                    completedAt: Date.now()
+                });
+                await postJobUpdate(job.id);
+                cleanup();
+                return;
             }
-            
-            await updateDoc(jobDocRef, { progress: i + 1 });
-            job.progress = i + 1; // Update local job object
-            await postJobUpdate(job.id);
         }
-        
+
+        // Update progress after all downloads are complete
+        await updateDoc(jobDocRef, {
+            progress: totalFiles,
+            progressMessage: `Todos os ${totalFiles} arquivos baixados e armazenados.`
+        });
+        await postJobUpdate(job.id);
+
+        // 2. Read files from IndexedDB and proceed with AI analysis
+        for (let i = 0; i < totalFiles; i++) {
+            if (cancelledJobIds.has(jobId)) {
+                console.log(`Job ${jobId} cancelled during file reading.`);
+                cleanup();
+                return;
+            }
+            const file = libraryFiles[i];
+            const fileContent = await getFileContentFromIndexedDB(`${jobId}-${i}`); // Assuming ID is jobId-index
+            if (fileContent) {
+                file.content = fileContent;
+                await updateDoc(jobDocRef, {
+                    libraryFiles: job.libraryFiles,
+                    progress: totalFiles + i + 1, // Adjust progress to reflect reading phase
+                    progressMessage: `Arquivo ${i + 1}/${totalFiles} lido do IndexedDB.`
+                });
+                await postJobUpdate(job.id);
+            } else {
+                // This else block should ideally not be hit if the download/store phase was successful
+                console.error(`File content for ${file.url} (ID: ${jobId}-${i}) not found in IndexedDB after download.`);
+                await updateDoc(jobDocRef, {
+                    status: 'failed',
+                    error: `Conteúdo do arquivo ${file.url} não encontrado no IndexedDB após o download.`,
+                    completedAt: Date.now()
+                });
+                await postJobUpdate(job.id);
+                cleanup();
+                return;
+            }
+        }
+
         if (cancelledJobIds.has(jobId)) {
             console.log(`Job ${jobId} cancelled before final synthesis.`);
             cleanup();
@@ -254,8 +346,12 @@ async function runSimilarityJob(jobId: string, uid: string) {
             ` : ''}
             **Resultados das Análises Individuais dos Documentos:**
             ---
-            ${individualResults.join('\n\n---\n\n')}
+            ${libraryFiles.map(file => `Análise do documento ${file.url}:
+            ${file.content || '[Conteúdo não disponível]'}`).join(`
+
             ---
+
+            `)}            ---
 
             **Instruções Finais:**
             1.  Com base nos resultados individuais, identifique até **5 EPIs mais similares** ao de referência.
@@ -303,7 +399,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
         };
         
         const finalResponse = await generateContentWithRetry(ai, {
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.0-flash-lite',
             contents: synthesisPrompt,
             config: {
                 responseMimeType: "application/json",
@@ -313,15 +409,18 @@ async function runSimilarityJob(jobId: string, uid: string) {
             updateDoc(jobDocRef, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
         });
         
+        console.log('Final response object:', finalResponse);
+        console.log('Final response text:', finalResponse.text);
+
         // 4. Update job as completed
         await updateDoc(jobDocRef, {
             status: 'completed',
-            result: finalResponse.text, // This will be a JSON string
+            result: finalResponse.text,
             completedAt: Date.now(),
             progress: job.totalFiles,
             progressMessage: "Finalizado"
         });
-        job.status = 'completed'; // Update local job object
+        job.status = 'completed';
         job.result = finalResponse.text;
         job.completedAt = Date.now();
         job.progress = job.totalFiles;
@@ -330,13 +429,12 @@ async function runSimilarityJob(jobId: string, uid: string) {
         // 5. Show notification
         await self.registration.showNotification('Busca de Similaridade Concluída', {
             body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`, 
-            icon: '/favicon.ico', // A default icon
-            tag: jobId, // Use job ID as tag to prevent duplicate notifications and allow replacement
+            icon: '/favicon.ico',
+            tag: jobId,
         });
 
     } catch (e) {
         console.error(`Error processing job ${jobId}:`, e);
-        // Refetch job from DB in case it was deleted by the user in the meantime
         const currentJobSnapshot = await getDoc(jobDocRef);
         let currentJobState = currentJobSnapshot.data() as SimilarityJob;
         if (currentJobState) {
@@ -355,7 +453,6 @@ async function runSimilarityJob(jobId: string, uid: string) {
             });
         }
     } finally {
-        // Post a final update to the client if the job still exists
         const finalJobSnapshot = await getDoc(jobDocRef);
         if (finalJobSnapshot.exists()) {
             await postJobUpdate(jobId);

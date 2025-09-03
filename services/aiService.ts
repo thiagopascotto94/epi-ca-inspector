@@ -1,12 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { CAData, Library, SimilarityJob } from '../types';
-import { fetchUrlAsText, generateContentWithRetry } from './apiService';
+import { fetchUrlAsText, fetchUrlAsTextWithRetry, generateContentWithRetry } from './apiService';
 import { IS_DEV_MODE } from '../config';
 import { FIXED_LIBRARIES } from './fixedData';
 
 export class AIService {
 
-    static async getKnowledgeContext(libraryId: string, libraries: Library[]): Promise<string> {
+    static async getKnowledgeContext(libraryId: string, libraries: Library[], onProgress: (message: string) => void): Promise<string[]> {
         let selectedLibrary: Library | undefined;
 
         if (IS_DEV_MODE) {
@@ -17,87 +17,190 @@ export class AIService {
 
         if (selectedLibrary && selectedLibrary.files.length > 0) {
             try {
-                const fileContents = await Promise.all(selectedLibrary.files.map(file => fetchUrlAsText(file.url)));
-                return `
---- INÍCIO DA BASE DE CONHECIMENTO ---
-As informações a seguir foram extraídas de documentos fornecidas e devem ser usadas como contexto principal para a análise.
-${fileContents.join(`
+                const fileContents: string[] = [];
+                const totalFiles = selectedLibrary.files.length;
+                for (let i = 0; i < totalFiles; i++) {
+                    const file = selectedLibrary.files[i];
+                    onProgress(`Carregando arquivo ${i + 1} de ${totalFiles}: ${file.url}...`);
+                    const content = await fetchUrlAsTextWithRetry(file.url);
+                    fileContents.push(content);
+                }
 
----
+                // Define a maximum chunk size for the knowledge base
+                const MAX_KNOWLEDGE_CHUNK_SIZE = 900000; // 900KB, leaving room for prompt and response
 
-`)}
---- FIM DA BASE DE CONHECIMENTO ---
-`;
+                const chunks = AIService.splitContentIntoChunks(fileContents, MAX_KNOWLEDGE_CHUNK_SIZE);
+
+                return chunks.map(chunk => `
+                    --- INÍCIO DA BASE DE CONHECIMENTO ---
+
+                    As informações a seguir foram extraídas de documentos fornecidas e devem ser usadas como contexto principal para a análise.
+
+                    ${chunk}
+
+                    --- FIM DA BASE DE CONHECIMENTO ---
+                `);
+
             } catch (e) {
                 console.error("Error fetching library files:", e);
-                throw new Error("Falha ao carregar um ou mais arquivos da biblioteca. A análise prosseguirá sem esse contexto.");
+                throw new Error("Falha ao carregar um ou mais arquivos da biblioteca após múltiplas tentativas. A análise não pode prosseguir sem este contexto.");
             }
         }
-        return '';
+        return ['']; // Return an array with an empty string if no library or files
     }
 
     static async analyzeCAs(
-        caData: CAData, 
-        comparisonData: CAData, 
-        libraryId: string, 
+        caData: CAData,
+        comparisonData: CAData,
+        libraryId: string,
         libraries: Library[],
         onProgress: (message: string) => void
     ): Promise<string> {
-        let knowledgeContext = '';
+        let knowledgeContexts: string[] = []; // Change to array
         try {
-            knowledgeContext = await this.getKnowledgeContext(libraryId, libraries);
+            knowledgeContexts = await this.getKnowledgeContext(libraryId, libraries, onProgress);
         } catch (e) {
             // The error is already logged, and we can proceed without context.
         }
 
-        const ai = new GoogleGenAI(process.env.API_KEY!);
+        
+        const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY! });
+        const individualAnalysisResults: string[] = [];
+        const totalChunks = knowledgeContexts.length;
 
-        const prompt = `
-            ${knowledgeContext}
-            Análise Comparativa de Equipamentos de Proteção Individual (EPIs)
+        for (let i = 0; i < totalChunks; i++) {
+            const currentKnowledgeContext = knowledgeContexts[i];
+            onProgress(`Analisando parte ${i + 1} de ${totalChunks} da base de conhecimento...`);
 
-            Com base nos dados JSON a seguir${knowledgeContext ? ' e na base de conhecimento fornecida acima' : ''}, forneça uma análise comparativa detalhada entre os dois EPIs.
+            const prompt =
+                `${currentKnowledgeContext}
+                Análise Comparativa de Equipamentos de Proteção Individual (EPIs)
 
-            **EPI 1 (CA ${caData.caNumber}):**
-            \`\`\`json
-            ${JSON.stringify(caData, null, 2)}
-            \`\`\`
+                Com base nos dados JSON a seguir${currentKnowledgeContext ? ' e na base de conhecimento fornecida acima' : ''}, forneça uma análise comparativa detalhada entre os dois EPIs.
 
-            **EPI 2 (CA ${comparisonData.caNumber}):**
-            \`\`\`json
-            ${JSON.stringify(comparisonData, null, 2)}
-            \`\`\`
+                **EPI 1 (CA ${caData.caNumber}):**
+                \`\`\`json
+                ${JSON.stringify(caData, null, 2)}
+                \`\`\`
 
-            **Formato da Resposta:**
+                **EPI 2 (CA ${comparisonData.caNumber}):**
+                \`\`\`json
+                ${JSON.stringify(comparisonData, null, 2)}
+                \`\`\`
 
-            Você é um especialista em segurança do trabalho. Elabore um relatório claro e objetivo em português do Brasil, usando Markdown, com as seguintes seções:
+                **Formato da Resposta (HTML Infográfico com Tailwind CSS):**
 
-            ### Principais Diferenças
-            Liste em tópicos os pontos-chave que distinguem os dois EPIs (material, tipo de proteção, normas, etc.).
+                Você é um especialista em segurança do trabalho. Elabore um infográfico comparativo em HTML, utilizando classes do Tailwind CSS para estilização. O HTML deve ser completo e autocontido, sem necessidade de scripts externos ou folhas de estilo adicionais além do Tailwind.
 
-            ### Indicações de Uso
-            - **EPI 1 (CA ${caData.caNumber}):** Descreva os cenários ideais para seu uso.
-            - **EPI 2 (CA ${comparisonData.caNumber}):** Descreva os cenários ideais para seu uso.
+                **Diretrizes de Estilo Tailwind:**
+                - Use cores da paleta padrão do Tailwind (ex: 'bg-blue-100', 'text-blue-800', 'border-gray-300').
+                - Utilize 'p-4', 'm-4', 'shadow-md', 'rounded-lg' para espaçamento, sombras e bordas arredondadas.
+                - Para títulos, use classes como 'text-xl', 'text-2xl', 'font-bold', 'text-gray-800'.
+                - Para o corpo do texto, use 'text-gray-700', 'leading-relaxed'.
+                - Estruture o conteúdo em 'div's com classes flexbox ('flex', 'flex-col', 'items-center', 'justify-center') ou grid ('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6') para layout responsivo.
+                - Use ícones ou emojis simples para visualização, se apropriado.
 
-            ### Contraindicações
-            - **EPI 1 (CA ${caData.caNumber}):** Onde este EPI **não** deve ser utilizado.
-            - **EPI 2 (CA ${comparisonData.caNumber}):** Onde este EPI **não** deve ser utilizado.
+                **Estrutura do Infográfico:**
+                Retorne APENAS o código HTML, sem qualquer texto adicional, formatação Markdown (como 
+                \`\`\`html
+                ) ou comentários.
 
-            ### Conclusão e Recomendação
-            Um resumo conciso para ajudar na escolha entre os dois, baseado nos dados fornecidos.
-        `;
+                <div class="container mx-auto p-4 bg-white shadow-lg rounded-lg">
+                    <h1 class="text-3xl font-bold text-center text-blue-700 mb-6">Análise Comparativa de EPIs</h1>
 
-        try {
-            const response = await generateContentWithRetry(
-                ai,
-                { model: 'gemini-1.5-flash', contents: [{role: 'user', parts: [{text: prompt}]}] },
-                3,
-                (attempt) => onProgress(`Analisando... (Tentativa ${attempt}/3)`)
-            );
-            return response.candidates[0].content.parts[0].text;
-        } catch (e) {
-            console.error("AI Analysis Error after retries:", e);
-            throw new Error("Ocorreu um erro ao conectar com o serviço de IA após múltiplas tentativas. Verifique sua chave de API e tente novamente.");
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-blue-50 p-4 rounded-lg shadow-sm border border-blue-200">
+                            <h2 class="text-xl font-semibold text-blue-600 mb-2">EPI 1 (CA ${caData.caNumber})</h2>
+                            <p class="text-gray-700">${caData.equipmentName || 'Nome não disponível'}</p>
+                            <!-- Adicione mais detalhes do EPI 1 aqui -->
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
+                            <h2 class="text-xl font-semibold text-green-600 mb-2">EPI 2 (CA ${comparisonData.caNumber})</h2>
+                            <p class="text-gray-700">${comparisonData.equipmentName || 'Nome não disponível'}</p>
+                            <!-- Adicione mais detalhes do EPI 2 aqui -->
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Principais Diferenças</h2>
+                        <ul class="list-disc list-inside text-gray-700 space-y-2">
+                            <li>[Diferença 1]</li>
+                            <li>[Diferença 2]</li>
+                        </ul>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Indicações de Uso</h2>
+                            <h3 class="text-xl font-semibold text-blue-600 mb-2">EPI 1 (CA ${caData.caNumber})</h3>
+                            <p class="text-gray-700 leading-relaxed">[Cenários ideais para EPI 1]</p>
+                            <h3 class="text-xl font-semibold text-green-600 mt-4 mb-2">EPI 2 (CA ${comparisonData.caNumber})</h3>
+                            <p class="text-gray-700 leading-relaxed">[Cenários ideais para EPI 2]</p>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Contraindicações</h2>
+                            <h3 class="text-xl font-semibold text-blue-600 mb-2">EPI 1 (CA ${caData.caNumber})</h3>
+                            <p class="text-gray-700 leading-relaxed">[Onde EPI 1 NÃO deve ser utilizado]</p>
+                            <h3 class="text-xl font-semibold text-green-600 mt-4 mb-2">EPI 2 (CA ${comparisonData.caNumber})</h3>
+                            <p class="text-gray-700 leading-relaxed">[Onde EPI 2 NÃO deve ser utilizado]</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Conclusão e Recomendação</h2>
+                        <p class="text-gray-700 leading-relaxed">[Resumo conciso e recomendação]</p>
+                    </div>
+                </div>
+            `
+
+            try {
+                const response = await generateContentWithRetry(
+                    ai,
+                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
+                    3,
+                    (attempt) => onProgress(`Analisando parte ${i + 1} de ${totalChunks}... (Tentativa ${attempt}/3)`)
+                );
+                individualAnalysisResults.push(response.candidates[0].content.parts[0].text);
+            } catch (e) {
+                console.error(`AI Analysis Error for chunk ${i + 1} after retries:`, e);
+                individualAnalysisResults.push('[ERRO] Falha na análise da parte ${i + 1} da base de conhecimento.');
+            }
+        }
+
+        // Synthesize results if there are multiple chunks
+        if (individualAnalysisResults.length > 1) {
+            onProgress('Sintetizando resultados da análise...');
+            const synthesisPrompt = `
+                Você é um especialista em segurança do trabalho. Consolide os seguintes fragmentos de HTML, que são análises comparativas de EPIs, em um único infográfico HTML coeso e objetivo em português do Brasil. Utilize as classes do Tailwind CSS para manter a identidade visual.
+
+                **Fragmentos HTML Individuais:**
+                ${individualAnalysisResults.join('\n\n<!-- --- -->\n\n')}
+
+                **Instruções:**
+                - Combine as informações de todos os fragmentos, removendo redundâncias e garantindo que o HTML resultante seja válido e bem estruturado.
+                - Mantenha a estrutura de seções: "Principais Diferenças", "Indicações de Uso", "Contraindicações", "Conclusão e Recomendação".
+                - Certifique-se de que o infográfico final seja claro, conciso, fácil de entender e visualmente atraente, seguindo as diretrizes de estilo Tailwind fornecidas anteriormente.
+                - O HTML final deve ser autocontido dentro de uma única div principal com classes Tailwind apropriadas (ex: container, mx-auto, p-4, bg-white, shadow-lg, rounded-lg).
+                Retorne APENAS o código HTML, sem qualquer texto adicional, formatação Markdown (como 
+                \`\`\`html) ou comentários.
+            `;
+
+            try {
+                const finalResponse = await generateContentWithRetry(
+                    ai,
+                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
+                    3,
+                    (attempt) => onProgress(`Sintetizando resultados... (Tentativa ${attempt}/3)`)
+                );
+                return finalResponse.candidates[0].content.parts[0].text;
+            } catch (e) {
+                console.error("AI Synthesis Error after retries:", e);
+                throw new Error("Ocorreu um erro ao sintetizar os resultados da análise após múltiplas tentativas.");
+            }
+        } else if (individualAnalysisResults.length === 1) {
+            return individualAnalysisResults[0]; // Only one chunk, no synthesis needed
+        } else {
+            throw new Error("Nenhum resultado de análise foi gerado.");
         }
     }
 
@@ -108,7 +211,7 @@ ${fileContents.join(`
         onProgress: (message: string) => void
     ): Promise<string> {
         const selectedLibrary = IS_DEV_MODE ? libraries.find(lib => lib.id === libraryId) : FIXED_LIBRARIES[0];
-        
+
         if (!selectedLibrary) {
             const message = IS_DEV_MODE ? "Por favor, selecione uma biblioteca de conhecimento para a conversão." : "Biblioteca de produção não encontrada.";
             throw new Error(message);
@@ -118,55 +221,132 @@ ${fileContents.join(`
             throw new Error("A biblioteca selecionada está vazia.");
         }
 
-        let knowledgeBaseContent = '';
+        let knowledgeBaseContents: string[] = []; // Change to array
         try {
-            onProgress('Carregando arquivos da biblioteca...');
-            const fileContents = await Promise.all(selectedLibrary.files.map(file => fetchUrlAsText(file.url)));
-            knowledgeBaseContent = fileContents.join(`
-
----
-
-`);
+            // Use getKnowledgeContext to load files sequentially with progress
+            knowledgeBaseContents = await this.getKnowledgeContext(libraryId, libraries, onProgress);
         } catch (e) {
             console.error("Error fetching library files for conversion:", e);
-            throw new Error("Falha ao carregar um ou mais arquivos da biblioteca. A análise não pode prosseguir.");
+            throw new Error("Falha ao carregar um ou mais arquivos da biblioteca após múltiplas tentativas. A análise não pode prosseguir.");
         }
 
-        const ai = new GoogleGenAI(process.env.API_KEY!);
+        const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY! });
+        const individualConversionSuggestions: string[] = [];
+        const totalChunks = knowledgeBaseContents.length;
 
-        const prompt = `
-            Você é um especialista em Certificados de Aprovação (CAs) e fichas técnicas de Equipamentos de Proteção Individual (EPIs) para calçados. Sua principal tarefa é analisar as informações de um CA de concorrente e, com base em um conjunto de dados de referência (sua base de conhecimento), identificar e sugerir o produto da nossa linha que melhor corresponde a ele.
+        for (let i = 0; i < totalChunks; i++) {
+            const currentKnowledgeBaseContent = knowledgeBaseContents[i];
+            onProgress(`Analisando parte ${i + 1} de ${totalChunks} da base de conhecimento para conversão...`);
 
-            **Base de Conhecimento (Nossos Produtos):**
-            ---
-            ${knowledgeBaseContent}
-            ---
+            const prompt = 
+            `Você é um especialista em Certificados de Aprovação (CAs) e fichas técnicas de Equipamentos de Proteção Individual (EPIs) para calçados. Sua principal tarefa é analisar as informações de um CA de concorrente e, com base em um conjunto de dados de referência (sua base de conhecimento), identificar e sugerir o produto da nossa linha que melhor corresponde a ele.
 
-            **CA do Concorrente para Análise:**
-            \`\`\`json
-            ${JSON.stringify(caData, null, 2)}
-            \`\`\`
+                **Base de Conhecimento (Nossos Produtos):**
+                ---
+                ${currentKnowledgeBaseContent}
+                ---
 
-            **Formato da Resposta:**
+                **CA do Concorrente para Análise:**
+                
+                ${JSON.stringify(caData, null, 2)}
+                
 
-            Sua resposta deve ser estruturada em três seções:
+                **Formato da Resposta (HTML Infográfico com Tailwind CSS):**
 
-            1.  **Sugestão de Conversão:** A recomendação mais provável do nosso produto e seu respectivo CA.
-            2.  **Análise de Correspondência:** Uma breve análise que justifique a sugestão, destacando as características que se alinham (material, tipo de biqueira, palmilha, etc.) e as que podem ser diferentes.
-            3.  **Pontos de Atenção:** Qualquer diferença crítica (ex: sapato vs. bota, proteção S1 vs. S2, etc.) que o operador deve verificar manualmente.
-        `;
+                Você é um especialista em segurança do trabalho. Elabore um infográfico de sugestão de conversão em HTML, utilizando classes do Tailwind CSS para estilização. O HTML deve ser completo e autocontido, sem necessidade de scripts externos ou folhas de estilo adicionais além do Tailwind.
 
-        try {
-            const response = await generateContentWithRetry(
-                ai,
-                { model: 'gemini-1.5-flash', contents: [{role: 'user', parts: [{text: prompt}]}] },
-                3,
-                (attempt) => onProgress(`Analisando... (Tentativa ${attempt}/3)`)
-            );
-            return response.candidates[0].content.parts[0].text;
-        } catch (e) {
-            console.error("Conversion suggestion error after retries:", e);
-            throw new Error("Ocorreu um erro ao conectar com o serviço de IA após múltiplas tentativas. Verifique sua chave de API e tente novamente.");
+                **Diretrizes de Estilo Tailwind:**
+                - Use cores da paleta padrão do Tailwind (ex: 'bg-yellow-100', 'text-yellow-800', 'border-gray-300').
+                - Utilize 'p-4', 'm-4', 'shadow-md', 'rounded-lg' para espaçamento, sombras e bordas arredondadas.
+                - Para títulos, use classes como 'text-xl', 'text-2xl', 'font-bold', 'text-gray-800'.
+                - Para o corpo do texto, use 'text-gray-700', 'leading-relaxed'.
+                - Estruture o conteúdo em 'div's com classes flexbox ('flex', 'flex-col', 'items-center', 'justify-center') ou grid ('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6') para layout responsivo.
+                - Use ícones ou emojis simples para visualização, se apropriado.
+
+                **Estrutura do Infográfico:**
+                Retorne APENAS o código HTML, sem qualquer texto adicional, formatação Markdown (como 
+                \`\`\`html
+                ) ou comentários.
+
+                <div class="container mx-auto p-4 bg-white shadow-lg rounded-lg">
+                    <h1 class="text-3xl font-bold text-center text-yellow-700 mb-6">Sugestão de Conversão de Produto</h1>
+
+                    <div class="bg-yellow-50 p-4 rounded-lg shadow-sm border border-yellow-200 mb-8">
+                        <h2 class="text-xl font-semibold text-yellow-600 mb-2">CA do Concorrente (${caData.caNumber})</h2>
+                        <p class="text-gray-700">${caData.equipmentName || 'Nome não disponível'}</p>
+                        <!-- Adicione mais detalhes do CA do concorrente aqui -->
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Sugestão de Conversão</h2>
+                        <p class="text-gray-700 leading-relaxed">[Recomendação mais provável do nosso produto e seu respectivo CA]</p>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Análise de Correspondência</h2>
+                        <p class="text-gray-700 leading-relaxed">[Análise que justifique a sugestão]</p>
+                    </div>
+
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Pontos de Atenção</h2>
+                        <p class="text-gray-700 leading-relaxed">[Qualquer diferença crítica]</p>
+                    </div>
+                </div>
+            
+            `
+
+            try {
+                const response = await generateContentWithRetry(
+                    ai,
+                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
+                    3,
+                    (attempt) => onProgress(`Analisando parte ${i + 1} de ${totalChunks}... (Tentativa ${attempt}/3)`)
+                );
+                individualConversionSuggestions.push(response.candidates[0].content.parts[0].text);
+            } catch (e) {
+                console.error(`Conversion suggestion error for chunk ${i + 1} after retries:`, e);
+                individualConversionSuggestions.push(`[ERRO] Falha na sugestão de conversão da parte ${i + 1} da base de conhecimento.`);
+            }
+        }
+
+        // Synthesize results if there are multiple chunks
+        if (individualConversionSuggestions.length > 1) {
+            onProgress('Sintetizando sugestões de conversão...');
+            const synthesisPrompt = `
+                Você é um especialista em Certificados de Aprovação (CAs) e fichas técnicas de Equipamentos de Proteção Individual (EPIs) para calçados. Consolide os seguintes fragmentos de HTML, que são sugestões de conversão, em um único infográfico HTML coeso e objetivo em português do Brasil. Utilize as classes do Tailwind CSS para manter a identidade visual.
+
+                **Fragmentos HTML Individuais:**
+                ${individualConversionSuggestions.join(`
+
+                <!-- --- -->
+
+                `)}
+
+                                **Instruções:**
+                                - Combine as informações de todos os fragmentos, removendo redundâncias e garantindo que o HTML resultante seja válido e bem estruturado.
+                                - Mantenha a estrutura de seções: "Sugestão de Conversão", "Análise de Correspondência", "Pontos de Atenção".
+                                - Certifique-se de que o infográfico final seja claro, conciso, fácil de entender e visualmente atraente, seguindo as diretrizes de estilo Tailwind fornecidas anteriormente.
+                                - O HTML final deve ser autocontido dentro de uma única div principal com classes Tailwind apropriadas (ex: container, mx-auto, p-4, bg-white, shadow-lg, rounded-lg).
+                                Retorne APENAS o código HTML, sem qualquer texto adicional, formatação Markdown (como 
+                \`\`\`html) ou comentários.
+            `;
+
+            try {
+                const finalResponse = await generateContentWithRetry(
+                    ai,
+                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
+                    3,
+                    (attempt) => onProgress(`Sintetizando sugestões... (Tentativa ${attempt}/3)`)
+                );
+                return finalResponse.candidates[0].content.parts[0].text;
+            } catch (e) {
+                console.error("AI Synthesis Error after retries:", e);
+                throw new Error("Ocorreu um erro ao sintetizar as sugestões de conversão após múltiplas tentativas.");
+            }
+        } else if (individualConversionSuggestions.length === 1) {
+            return individualConversionSuggestions[0]; // Only one chunk, no synthesis needed
+        } else {
+            throw new Error("Nenhuma sugestão de conversão foi gerada.");
         }
     }
 
@@ -179,17 +359,17 @@ ${fileContents.join(`
         if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
             throw new Error("Service Worker não está ativo. A busca em segundo plano não pode ser iniciada.");
         }
-        if (!process.env.API_KEY) {
+        if (!process.env.VITE_GEMINI_API_KEY) {
             throw new Error("A chave de API não foi configurada.");
         }
-        
+
         const selectedLibrary = IS_DEV_MODE ? libraries.find(lib => lib.id === libraryId) : FIXED_LIBRARIES[0];
-        
+
         if (!selectedLibrary) {
             const message = IS_DEV_MODE ? "Por favor, selecione uma biblioteca." : "Biblioteca de produção não configurada.";
             throw new Error(message);
         }
-        
+
         if (selectedLibrary.files.length === 0) {
             throw new Error("A biblioteca selecionada está vazia.");
         }
@@ -210,5 +390,30 @@ ${fileContents.join(`
         // The service worker will be notified by Dashboard.tsx after the job is created.
 
         return jobData;
+    }
+
+    static splitContentIntoChunks(fileContents: string[], maxChunkSize: number): string[] {
+        const chunks: string[] = [];
+        let currentChunk = '';
+
+        for (const content of fileContents) {
+            // Check if adding the next file content (plus separator) exceeds the maxChunkSize
+            // The separator is `\n\n---\n\n` which has a length of 10 characters.
+            if (currentChunk.length + content.length + 10 > maxChunkSize && currentChunk.length > 0) {
+                chunks.push(currentChunk);
+                currentChunk = '';
+            }
+
+            if (currentChunk.length > 0) {
+                currentChunk += `\n\n---\n\n`;
+            }
+            currentChunk += content;
+        }
+
+        if (currentChunk.length > 0) {
+            chunks.push(currentChunk);
+        }
+
+        return chunks;
     }
 }
