@@ -1,15 +1,37 @@
 /// <reference lib="webworker" />
 
-// We need to declare self as a ServiceWorkerGlobalScope to access its methods
 declare const self: ServiceWorkerGlobalScope;
 
 import { GoogleGenAI, Type } from "@google/genai";
-import * as idb from './services/idbService';
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, updateDoc, collection, query, orderBy, getDocs } from "firebase/firestore";
 import { fetchUrlAsText, generateContentWithRetry } from './services/apiService';
+import { SimilarityJob } from './types';
+
+// --- Firebase Initialization ---
+// Firebase config will be passed from the client when a job starts
+let firebaseApp: any = null;
+let db: any = null;
+
+function initializeFirebase(apiKey: string, uid: string) {
+    if (firebaseApp) return; // Already initialized
+
+    const firebaseConfig = {
+        apiKey: apiKey,
+        authDomain: "epi-ca-inspector.firebaseapp.com", // These can be hardcoded or passed
+        projectId: "epi-ca-inspector",
+        storageBucket: "epi-ca-inspector.appspot.com",
+        messagingSenderId: "88060391632",
+        appId: "1:88060391632:web:c54fdfc7fa5ae70dce6ed5"
+    };
+
+    firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp);
+}
 
 // --- State for Queue and Cancellation ---
 let isJobRunning = false;
-let apiKey: string | null = null;
+let currentUid: string | null = null;
 const cancelledJobIds = new Set<string>();
 
 
@@ -48,10 +70,10 @@ self.addEventListener('notificationclick', (event) => {
 // Listen for messages from the main application
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'START_SIMILARITY_JOB') {
-        const { jobId } = event.data.payload;
+        const { jobId, apiKey, uid } = event.data.payload;
         console.log(`Service Worker: Received job ${jobId}, adding to queue.`);
-        // Store API key from the client and kick off the queue
-        apiKey = event.data.payload.apiKey;
+        initializeFirebase(apiKey, uid);
+        currentUid = uid;
         processQueue();
     } else if (event.data && event.data.type === 'CANCEL_SIMILARITY_JOB') {
         const { jobId } = event.data.payload;
@@ -66,14 +88,18 @@ async function processQueue() {
         return;
     }
 
-    if (!apiKey) {
-        console.log('SW: API key not available. Waiting for a job to be initiated from the client app.');
+    if (!db || !currentUid) {
+        console.log('SW: Firebase or UID not available. Waiting for a job to be initiated from the client app.');
         return;
     }
 
-    const jobs = await idb.getAllJobs();
+    const jobsCollectionRef = collection(db, `users/${currentUid}/jobs`);
+    const q = query(jobsCollectionRef, orderBy('createdAt', 'asc'));
+    const querySnapshot = await getDocs(q);
+    const allJobs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimilarityJob));
+
     // Find the oldest pending job
-    const nextJob = jobs.filter(j => j.status === 'pending').sort((a, b) => a.createdAt - b.createdAt)[0];
+    const nextJob = allJobs.filter(j => j.status === 'pending')[0];
 
     if (!nextJob) {
         console.log('SW: No pending jobs in the queue.');
@@ -94,7 +120,7 @@ async function processQueue() {
     console.log(`SW: Starting job ${nextJob.id}`);
 
     // Run the job, and when it's done (success or fail), unset the flag and process the next one.
-    runSimilarityJob(nextJob.id, apiKey)
+    runSimilarityJob(nextJob.id, currentUid)
         .catch(err => {
             console.error(`SW: Unhandled error in runSimilarityJob for ${nextJob.id}`, err);
         })
@@ -113,10 +139,18 @@ const postJobUpdate = async (jobId: string) => {
     }
 }
 
-async function runSimilarityJob(jobId: string, apiKey: string) {
-    let job = await idb.getJob(jobId);
+async function runSimilarityJob(jobId: string, uid: string) {
+    if (!db) {
+        console.error("Firestore DB not initialized in Service Worker.");
+        return;
+    }
+
+    const jobDocRef = doc(db, `users/${uid}/jobs`, jobId);
+    let jobSnapshot = await getDoc(jobDocRef);
+    let job = jobSnapshot.data() as SimilarityJob;
+
     if (!job) {
-        console.error(`Job ${jobId} not found in IDB.`);
+        console.error(`Job ${jobId} not found in Firestore.`);
         cancelledJobIds.delete(jobId); // Clean up
         return;
     }
@@ -133,19 +167,23 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
         }
 
         // 1. Set status to processing
-        job.status = 'processing';
+        await updateDoc(jobDocRef, {
+            status: 'processing',
+            progress: 0,
+            progressMessage: 'Iniciando análise...'
+        });
+        job.status = 'processing'; // Update local job object
         job.progress = 0;
         job.progressMessage = 'Iniciando análise...';
-        await idb.updateJob(job);
         await postJobUpdate(job.id);
 
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: firebaseApp.options.apiKey });
         const { caData, libraryFiles, description, libraryName } = job;
         const individualResults: string[] = [];
         
         const totalFiles = libraryFiles.length;
-        job.totalFiles = totalFiles;
-        await idb.updateJob(job);
+        await updateDoc(jobDocRef, { totalFiles: totalFiles });
+        job.totalFiles = totalFiles; // Update local job object
 
         // 2. Analyze each file
         for (let i = 0; i < totalFiles; i++) {
@@ -162,9 +200,9 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
                 Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
                 
                 **EPI de Referência (CA ${caData.caNumber}):**
-                \`\`\`json
+                ```json
                 ${JSON.stringify({ name: caData.equipmentName, approvedFor: caData.approvedFor, description: caData.description }, null, 2)}
-                \`\`\`
+                ```
                 ${description.trim() ? `
                 **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
                 ${description.trim()}
@@ -182,8 +220,7 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             
             try {
                 const response = await generateContentWithRetry(ai, { model: 'gemini-2.5-flash', contents: perFilePrompt }, 3, (attempt) => {
-                    job.progressMessage = `Analisando arquivo ${i + 1}/${totalFiles} (Tentativa ${attempt}/3)...`;
-                    idb.updateJob(job); // Fire-and-forget update
+                    updateDoc(jobDocRef, { progressMessage: `Analisando arquivo ${i + 1}/${totalFiles} (Tentativa ${attempt}/3)...` });
                 });
                 individualResults.push(`Análise do documento ${file.url}:\n${response.text}`);
             } catch (fileError) {
@@ -191,8 +228,8 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
                 individualResults.push(`[ERRO] A análise do documento ${file.url} falhou após múltiplas tentativas.`);
             }
             
-            job.progress = i + 1;
-            await idb.updateJob(job);
+            await updateDoc(jobDocRef, { progress: i + 1 });
+            job.progress = i + 1; // Update local job object
             await postJobUpdate(job.id);
         }
         
@@ -207,9 +244,9 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
             Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
             **EPI de Referência (CA ${caData.caNumber}):**
-            \`\`\`json
+            ```json
             ${JSON.stringify(caData, null, 2)}
-            \`\`\`
+            ```
             ${description.trim() ? `
             **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
             ${description.trim()}
@@ -272,21 +309,26 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
                 responseSchema: responseSchema,
             }
         }, 3, (attempt) => {
-            job.progressMessage = `Realizando síntese final (Tentativa ${attempt}/3)...`;
-            idb.updateJob(job);
+            updateDoc(jobDocRef, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
         });
         
         // 4. Update job as completed
-        job.status = 'completed';
-        job.result = finalResponse.text; // This will be a JSON string
+        await updateDoc(jobDocRef, {
+            status: 'completed',
+            result: finalResponse.text, // This will be a JSON string
+            completedAt: Date.now(),
+            progress: job.totalFiles,
+            progressMessage: "Finalizado"
+        });
+        job.status = 'completed'; // Update local job object
+        job.result = finalResponse.text;
         job.completedAt = Date.now();
         job.progress = job.totalFiles;
         job.progressMessage = "Finalizado";
-        await idb.updateJob(job);
 
         // 5. Show notification
         await self.registration.showNotification('Busca de Similaridade Concluída', {
-            body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`,
+            body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`, 
             icon: '/favicon.ico', // A default icon
             tag: jobId, // Use job ID as tag to prevent duplicate notifications and allow replacement
         });
@@ -294,21 +336,27 @@ async function runSimilarityJob(jobId: string, apiKey: string) {
     } catch (e) {
         console.error(`Error processing job ${jobId}:`, e);
         // Refetch job from DB in case it was deleted by the user in the meantime
-        let currentJobState = await idb.getJob(jobId);
+        const currentJobSnapshot = await getDoc(jobDocRef);
+        let currentJobState = currentJobSnapshot.data() as SimilarityJob;
         if (currentJobState) {
+            await updateDoc(jobDocRef, {
+                status: 'failed',
+                error: (e as Error).message || 'Ocorreu um erro desconhecido.',
+                completedAt: Date.now()
+            });
             currentJobState.status = 'failed';
             currentJobState.error = (e as Error).message || 'Ocorreu um erro desconhecido.';
             currentJobState.completedAt = Date.now();
-            await idb.updateJob(currentJobState);
             await self.registration.showNotification('Busca de Similaridade Falhou', {
-                body: `A busca para o CA ${job.caData.caNumber} encontrou um erro.`,
+                body: `A busca para o CA ${job.caData.caNumber} encontrou um erro.`, 
                 icon: '/favicon.ico',
                 tag: jobId,
             });
         }
     } finally {
         // Post a final update to the client if the job still exists
-        if (await idb.getJob(jobId)) {
+        const finalJobSnapshot = await getDoc(jobDocRef);
+        if (finalJobSnapshot.exists()) {
             await postJobUpdate(jobId);
         }
         cleanup();

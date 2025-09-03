@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Router as AppRoutes } from './routes';
+import ErrorBoundary from './components/ErrorBoundary';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -21,6 +22,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <AppRoutes />
+    <ErrorBoundary>
+      <AppRoutes />
+    </ErrorBoundary>
   </React.StrictMode>
 );

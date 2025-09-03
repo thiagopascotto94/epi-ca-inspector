@@ -1,9 +1,9 @@
-
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import { auth } from "./firebase/firebase"; // Import auth from your firebase config
 
 const App = lazy(() => import("./App"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 
 const router = createBrowserRouter([
   {
@@ -14,40 +14,10 @@ const router = createBrowserRouter([
       </Suspense>
     ),
     children: [
-      {
-        index: true,
-        async lazy() {
-          const { default: Component } = await import("./pages/HomePage");
-          return { Component };
-        },
-      },
-      {
-        path: "login",
-        async lazy() {
-          const { default: Component } = await import("./pages/LoginPage");
-          return { Component };
-        },
-      },
-      {
-        path: "register",
-        async lazy() {
-          const { default: Component } = await import("./pages/RegisterPage");
-          return { Component };
-        },
-      },
-      {
-        path: "dashboard",
-        async lazy() {
-          const { default: Component } = await import("./pages/DashboardPage");
-          return { Component };
-        },
-        loader: () => {
-          if (!auth.currentUser) {
-            throw new Response("Unauthorized", { status: 401 });
-          }
-          return null;
-        },
-      },
+      { path: "login", element: <LoginPage/> },
+      { path: "register", element: <RegisterPage/> },
+      // Redirect any other path to login if not authenticated
+      { path: "*", element: <Navigate to="/login" replace /> }
     ],
   },
 ]);

@@ -3,7 +3,6 @@ import { CAData, Library, SimilarityJob } from '../types';
 import { fetchUrlAsText, generateContentWithRetry } from './apiService';
 import { IS_DEV_MODE } from '../config';
 import { FIXED_LIBRARIES } from './fixedData';
-import * as idb from './idbService';
 
 export class AIService {
 
@@ -21,7 +20,7 @@ export class AIService {
                 const fileContents = await Promise.all(selectedLibrary.files.map(file => fetchUrlAsText(file.url)));
                 return `
 --- INÍCIO DA BASE DE CONHECIMENTO ---
-As informações a seguir foram extraídas de documentos fornecidos e devem ser usadas como contexto principal para a análise.
+As informações a seguir foram extraídas de documentos fornecidas e devem ser usadas como contexto principal para a análise.
 ${fileContents.join(`
 
 ---
@@ -176,7 +175,7 @@ ${fileContents.join(`
         libraryId: string,
         description: string,
         libraries: Library[]
-    ): Promise<SimilarityJob> {
+    ): Promise<Omit<SimilarityJob, 'id' | 'createdAt' | 'status'>> {
         if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
             throw new Error("Service Worker não está ativo. A busca em segundo plano não pode ser iniciada.");
         }
@@ -200,26 +199,16 @@ ${fileContents.join(`
             alert("A permissão para notificações é necessária para avisar quando a busca terminar.");
         }
 
-        const newJob: SimilarityJob = {
-            id: crypto.randomUUID(),
+        const jobData = {
             caData: caData,
             libraryFiles: selectedLibrary.files,
             libraryName: selectedLibrary.name,
             description: description,
-            status: 'pending',
-            createdAt: Date.now(),
         };
 
-        await idb.addJob(newJob);
-        
-        navigator.serviceWorker.controller.postMessage({
-            type: 'START_SIMILARITY_JOB',
-            payload: {
-                jobId: newJob.id,
-                apiKey: process.env.API_KEY
-            }
-        });
+        // The job will be created in Firestore by JobService.createJob
+        // The service worker will be notified by Dashboard.tsx after the job is created.
 
-        return newJob;
+        return jobData;
     }
 }
