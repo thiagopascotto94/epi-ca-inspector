@@ -196,27 +196,28 @@ async function runSimilarityJob(jobId: string, uid: string) {
             const file = libraryFiles[i];
             const fileContent = await fetchUrlAsText(file.url);
             
-            const perFilePrompt = `
-                Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
-                
-                **EPI de Referência (CA ${caData.caNumber}):**
-                ```json
-                ${JSON.stringify({ name: caData.equipmentName, approvedFor: caData.approvedFor, description: caData.description }, null, 2)}
-                ```
-                ${description.trim() ? `
-                **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
-                ${description.trim()}
-                ` : ''}
-                **Conteúdo do Documento (Fonte: ${file.url}):**
-                ---
-                ${fileContent}
-                ---
-                
-                **Sua Tarefa:**
-                Se encontrar um EPI similar no documento, descreva-o sucintamente, incluindo seu nome/identificador e a principal razão da similaridade. Dê forte preferência à "Descrição Adicional" se ela for fornecida.
-                Se nenhum similar for encontrado, responda "Nenhum EPI similar encontrado neste documento.".
-                Seja breve e objetivo.
-            `;
+                        const perFilePrompt =
+                            `Você é um especialista em EPIs. Analise o conteúdo do documento a seguir para encontrar um EPI similar ao EPI de Referência.
+            
+                            **EPI de Referência (CA ${caData.caNumber}):**
+                            \`\`\`json
+                            ${JSON.stringify({ name: caData.equipmentName, approvedFor: caData.approvedFor, description: caData.description }, null, 2)}
+                            \`\`\`
+                            ${description.trim() ?
+                                `**Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
+                            ${description.trim()}`
+                                : ''
+                            }
+                            **Conteúdo do Documento (Fonte: ${file.url}):**
+                            ---
+                            ${fileContent}
+                            ---
+            
+                            **Sua Tarefa:**
+                            Se encontrar um EPI similar no documento, descreva-o sucintamente, incluindo seu nome/identificador e a principal razão da similaridade. Dê forte preferência à "Descrição Adicional" se ela for fornecida.
+                            Se nenhum similar for encontrado, responda "Nenhum EPI similar encontrado neste documento.".
+                            Seja breve e objetivo.
+                            `;
             
             try {
                 const response = await generateContentWithRetry(ai, { model: 'gemini-2.5-flash', contents: perFilePrompt }, 3, (attempt) => {
@@ -240,13 +241,13 @@ async function runSimilarityJob(jobId: string, uid: string) {
         }
 
         // 3. Final synthesis with JSON response
-        const synthesisPrompt = `
-            Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
+        const synthesisPrompt = 
+            `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
             **EPI de Referência (CA ${caData.caNumber}):**
-            ```json
+            \`\`\`json
             ${JSON.stringify(caData, null, 2)}
-            ```
+            \`\`\`
             ${description.trim() ? `
             **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
             ${description.trim()}
@@ -268,37 +269,37 @@ async function runSimilarityJob(jobId: string, uid: string) {
         `;
 
         const responseSchema = {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              productName: {
-                type: Type.STRING,
-                description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
-              },
-              caNumber: {
-                type: Type.STRING,
-                description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
-              },
-              confidence: {
-                type: Type.NUMBER,
-                description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
-              },
-              justification: {
-                type: Type.STRING,
-                description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
-              },
-              detailedJustification: {
-                type: Type.STRING,
-                description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
-              },
-              imageUrl: {
-                type: Type.STRING,
-                description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
-              }
-            },
-            required: ["productName", "confidence", "justification", "detailedJustification"]
-          }
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    productName: {
+                        type: Type.STRING,
+                        description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
+                    },
+                    caNumber: {
+                        type: Type.STRING,
+                        description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
+                    },
+                    confidence: {
+                        type: Type.NUMBER,
+                        description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
+                    },
+                    justification: {
+                        type: Type.STRING,
+                        description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
+                    },
+                    detailedJustification: {
+                        type: Type.STRING,
+                        description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
+                    },
+                    imageUrl: {
+                        type: Type.STRING,
+                        description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
+                    }
+                },
+                required: ["productName", "confidence", "justification", "detailedJustification"]
+            }
         };
         
         const finalResponse = await generateContentWithRetry(ai, {
