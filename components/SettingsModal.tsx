@@ -3,7 +3,6 @@ import { Library, LibraryFile } from '../types';
 import { TrashIcon, XMarkIcon, ArrowUpTrayIcon, ArrowDownTrayIcon } from './Icon';
 import { PasswordPrompt } from './PasswordPrompt';
 import { encryptData, decryptData } from '../services/cryptoService';
-import { useDialog } from '../hooks/useDialog';
 import { PromptDialog } from './PromptDialog';
 
 
@@ -34,7 +33,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
   const [passwordPromptConfig, setPasswordPromptConfig] = useState<{ title: string; onConfirm: (password: string) => void; }>({ title: '', onConfirm: () => {} });
   const [fileContentToImport, setFileContentToImport] = useState<string | null>(null);
 
-  const { dialogState, prompt } = useDialog();
+  const [isPromptOpen, setIsPromptOpen] = useState(false);
+  const [promptConfig, setPromptConfig] = useState<{ message: string; onConfirm: (value: string) => void; onCancel: () => void; }>({ message: '', onConfirm: () => {}, onCancel: () => {} });
 
   useEffect(() => {
     if (isOpen) {
@@ -45,6 +45,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const prompt = (message: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setPromptConfig({
+        message,
+        onConfirm: (value: string) => {
+          setIsPromptOpen(false);
+          resolve(value);
+        },
+        onCancel: () => {
+          setIsPromptOpen(false);
+          resolve(null);
+        },
+      });
+      setIsPromptOpen(true);
+    });
+  };
 
   const handleEdit = (library: Library) => {
     setEditingLibrary(library);
@@ -304,6 +321,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
             title={passwordPromptConfig.title}
             onConfirm={passwordPromptConfig.onConfirm}
             onCancel={closePasswordPrompt}
+        />
+        <PromptDialog
+            isOpen={isPromptOpen}
+            message={promptConfig.message}
+            onConfirm={promptConfig.onConfirm}
+            onCancel={promptConfig.onCancel}
         />
     </>
   );
