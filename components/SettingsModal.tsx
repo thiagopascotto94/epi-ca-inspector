@@ -3,6 +3,8 @@ import { Library, LibraryFile } from '../types';
 import { TrashIcon, XMarkIcon, ArrowUpTrayIcon, ArrowDownTrayIcon } from './Icon';
 import { PasswordPrompt } from './PasswordPrompt';
 import { encryptData, decryptData } from '../services/cryptoService';
+import { useDialog } from '../hooks/useDialog';
+import { PromptDialog } from './PromptDialog';
 
 
 interface SettingsModalProps {
@@ -32,6 +34,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
   const [passwordPromptConfig, setPasswordPromptConfig] = useState<{ title: string; onConfirm: (password: string) => void; }>({ title: '', onConfirm: () => {} });
   const [fileContentToImport, setFileContentToImport] = useState<string | null>(null);
 
+  const { dialogState, prompt } = useDialog();
+
   useEffect(() => {
     if (isOpen) {
       setCurrentView('list');
@@ -47,9 +51,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
     setCurrentView('form');
   };
 
-  const handleAddNew = () => {
-    setEditingLibrary(emptyLibrary);
-    setCurrentView('form');
+  const handleAddNew = async () => {
+    const libraryName = await prompt('Qual o nome da nova biblioteca?');
+    if (libraryName) {
+      setEditingLibrary({ name: libraryName, files: [] });
+      setCurrentView('form');
+    }
   };
 
   const handleBackToList = () => {
@@ -59,10 +66,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
   };
 
   const handleSave = () => {
-    if (editingLibrary.name.trim() === '') {
-      alert('O nome da biblioteca não pode ser vazio.');
-      return;
-    }
     const libraryToSave: Library = 'id' in editingLibrary
       ? editingLibrary
       : { ...editingLibrary, id: crypto.randomUUID() };

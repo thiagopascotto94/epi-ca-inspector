@@ -56,8 +56,11 @@ const App: React.FC = () => {
     };
 
     const handleDeleteLibrary = async (libraryId: string) => {
-        if (!user) return;
+        console.log("libraryId", libraryId);
+        if (!user.uid) return;
+        console.log("user", user);
         handleShowConfirmation('Excluir Biblioteca', 'Tem certeza que deseja excluir esta biblioteca?', async () => {
+            console.log("teste")
             await LibraryService.deleteLibrary(user.uid, libraryId);
             setLibraries(await LibraryService.getLibraries(user.uid));
             setConfirmation(null);
@@ -99,8 +102,10 @@ const App: React.FC = () => {
                 onImportLibraries={handleImportLibraries}
                 onShowConfirmation={handleShowConfirmation}
             />
-            {confirmation && (
+            {confirmation?.title && (
+                console.log("ConfirmationDialog is attempting to render with:", confirmation),
                 <ConfirmationDialog
+                    isOpen={!!confirmation}
                     title={confirmation.title}
                     message={confirmation.message}
                     onConfirm={confirmation.onConfirm}
