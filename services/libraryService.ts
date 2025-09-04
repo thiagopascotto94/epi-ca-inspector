@@ -91,10 +91,10 @@ export class LibraryService {
 
             // Update the user's usage
             const usageDocRef = doc(db, `users/${uid}/usage/storage`);
-            batch.update(usageDocRef, {
+            batch.set(usageDocRef, {
                 bytes: usageUpdate.bytes,
                 tokens: usageUpdate.tokens
-            });
+            }, { merge: true });
 
             await batch.commit();
         } catch (e) {

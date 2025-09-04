@@ -10,11 +10,10 @@ import { User } from 'firebase/auth';
 interface HeaderProps {
     theme: Theme;
     toggleTheme: () => void;
-    onOpenSettings: () => void;
     user: User | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onOpenSettings, user }) => {
+export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, user }) => {
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -31,11 +30,6 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onOpenSettin
                 </div>
                  <div className="flex items-center gap-2">
                     <ThemeSwitcher theme={theme} toggleTheme={toggleTheme} />
-                    {IS_DEV_MODE && (
-                        <button onClick={onOpenSettings} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Configurações">
-                            <Cog6ToothIcon className="w-6 h-6"/>
-                        </button>
-                    )}
                     {user ? (
                         <>
                             <button onClick={() => navigate('/library')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Biblioteca">

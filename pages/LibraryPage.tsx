@@ -10,6 +10,11 @@ import EditLibraryDialog from '../components/EditLibraryDialog';
 import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 
+interface Source {
+    type: 'url' | 'file';
+    value: string | File;
+}
+
 const LibraryPage: React.FC = () => {
     const { user } = useOutletContext<{ user: User | null }>();
     const [libraries, setLibraries] = useState<Library[]>([]);
@@ -29,27 +34,51 @@ const LibraryPage: React.FC = () => {
         fetchLibraries();
     }, [user]);
 
-    const handleCreateLibrary = async (name: string, url: string) => {
+    const handleCreateLibrary = async (name: string, sources: Source[]) => {
         if (!user) return;
         setIsLoading(true);
+
         try {
-            const content = await fetchUrlAsText(url);
+            let totalBytes = 0;
+            let totalTokens = 0;
+            const newFiles: LibraryFile[] = [];
             const enc = get_encoding("cl100k_base");
-            const tokens = enc.encode(content).length;
-            const bytes = new TextEncoder().encode(content).length;
-            const hasEnoughSpace = await UsageService.hasEnoughSpace(user.uid, bytes, tokens);
+
+            for (const source of sources) {
+                let content = '';
+                let url = '';
+
+                if (source.type === 'url') {
+                    content = await fetchUrlAsText(source.value as string);
+                    url = source.value as string;
+                } else {
+                    content = await (source.value as File).text();
+                    url = (source.value as File).name;
+                }
+
+                const tokens = enc.encode(content).length;
+                const bytes = new TextEncoder().encode(content).length;
+
+                totalTokens += tokens;
+                totalBytes += bytes;
+
+                newFiles.push({ id: uuidv4(), url, content });
+            }
+
+            const hasEnoughSpace = await UsageService.hasEnoughSpace(user.uid, totalBytes, totalTokens);
             if (!hasEnoughSpace) {
                 alert('Você não tem espaço suficiente para adicionar esta biblioteca. O limite é de 1MB ou 900k tokens.');
                 setIsLoading(false);
                 return;
             }
-            const newFile: LibraryFile = { id: uuidv4(), url, content };
-            const newLibrary: Library = { id: uuidv4(), name, files: [newFile] };
+
+            const newLibrary: Library = { id: uuidv4(), name, files: newFiles };
             const currentUsage = await UsageService.getUsage(user.uid);
             const updatedUsage = {
-                bytes: currentUsage.bytes + bytes,
-                tokens: currentUsage.tokens + tokens,
+                bytes: currentUsage.bytes + totalBytes,
+                tokens: currentUsage.tokens + totalTokens,
             };
+
             await LibraryService.createLibrary(user.uid, newLibrary, updatedUsage);
             setLibraries(await LibraryService.getLibraries(user.uid));
             setIsCreateModalOpen(false);
