@@ -1,5 +1,3 @@
-
-
 export interface CAData {
   caNumber: string;
   status: string;
@@ -28,13 +26,18 @@ export interface CAData {
 
 export interface LibraryFile {
   id: string;
+    name: string;
   url: string;
+  content?: string;
 }
 
 export interface Library {
-  id: string;
+  id:string;
   name: string;
   files: LibraryFile[];
+  isSystemModel?: boolean;
+  systemModelId?: string;
+  usageCount?: number;
 }
 
 export interface SimilarityJob {
@@ -60,4 +63,15 @@ export interface ParsedSimilarityResult {
   justification: string;
   detailedJustification: string;
   imageUrl?: string;
+}
+
+export type Theme = 'light' | 'dark';
+
+export interface ConfirmationState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmButtonText?: string;
+    confirmButtonColor?: string;
 }

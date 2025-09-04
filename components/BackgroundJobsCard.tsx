@@ -39,7 +39,7 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                             <div>
                                 <p className="font-bold text-slate-700 dark:text-slate-200">CA {job.caData.caNumber}: {job.caData.equipmentName}</p>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Biblioteca: {job.libraryName} &bull; Criado em: {new Date(job.createdAt).toLocaleString()}
+                                    Biblioteca: {job.libraryName} &bull; Criado em: {job.createdAt.toDate().toLocaleString()}
                                 </p>
                             </div>
                             <div className="flex items-center gap-4">
@@ -67,7 +67,7 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                                   <div 
                                     className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                                    style={{ width: `${(job.progress || 0) / job.totalFiles * 100}%` }}>
+                                    style={{ width: `${Math.min(100, (job.progress || 0) / (2 * job.totalFiles) * 100)}%` }}>
                                   </div>
                                 </div>
                             </div>
