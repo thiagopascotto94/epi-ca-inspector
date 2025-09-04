@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cog6ToothIcon, DocumentTextIcon, ClipboardDocumentIcon } from './Icon';
+import { Cog6ToothIcon, DocumentTextIcon, ClipboardDocumentIcon, HomeIcon } from './Icon';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { IS_DEV_MODE } from '../config';
 import { Theme } from '../types';
@@ -32,6 +32,9 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, user }) => {
                     <ThemeSwitcher theme={theme} toggleTheme={toggleTheme} />
                     {user ? (
                         <>
+                            <button onClick={() => navigate('/')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Início">
+                                <HomeIcon className="w-6 h-6"/>
+                            </button>
                             <button onClick={() => navigate('/library')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Biblioteca">
                                 <ClipboardDocumentIcon className="w-6 h-6"/>
                             </button>
