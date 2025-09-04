@@ -101,7 +101,8 @@ const LibraryPage: React.FC = () => {
 
         try {
             const enc = get_encoding("cl100k_base");
-            const oldContent = library.files[0].content || '';
+
+            const oldContent = library.files.map(f => f.content || '').join('\n\n');
             const oldTokens = enc.encode(oldContent).length;
             const oldBytes = new TextEncoder().encode(oldContent).length;
 
@@ -123,7 +124,7 @@ const LibraryPage: React.FC = () => {
 
             const updatedLibrary: Library = {
                 ...library,
-                files: [{ ...library.files[0], content: newContent }],
+                files: [{ id: uuidv4(), url: 'edited', content: newContent }],
             };
 
             await LibraryService.updateLibrary(user.uid, updatedLibrary, updatedUsage);
