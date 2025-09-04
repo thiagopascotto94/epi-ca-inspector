@@ -1,6 +1,7 @@
 import { db } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { Library, LibraryFile } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 export class LibraryService {
     private static getLibraryCollectionRef(uid: string) {
@@ -116,7 +117,14 @@ export class LibraryService {
     static async importLibraryTemplate(uid: string, template: Library): Promise<void> {
         if (!uid) return;
         try {
-            const newLibrary = { ...template, id: template.id, systemModelId: template.id };
+            // Create a new library object from the template
+            // Generate a new ID for the user's copy of the library
+            // Store the original template's ID in systemModelId
+            const newLibrary: Library = {
+                ...template,
+                id: uuidv4(), // Generate a new unique ID
+                systemModelId: template.id, // Link back to the original template
+            };
             const libDocRef = doc(this.getLibraryCollectionRef(uid), newLibrary.id);
             await setDoc(libDocRef, newLibrary);
         } catch (e) {

@@ -176,7 +176,11 @@ const LibraryPage: React.FC = () => {
                     {libraries.map((lib) => (
                         <li key={lib.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                             <div>
-                                <Link to={`/library/${lib.id}`} className="font-semibold text-sky-600 dark:text-sky-500 hover:underline">{lib.name}</Link>
+                                {isRootUser ? (
+                                    <span className="font-semibold text-slate-900 dark:text-white">{lib.name}</span>
+                                ) : (
+                                    <Link to={`/library/${lib.id}`} className="font-semibold text-sky-600 dark:text-sky-500 hover:underline">{lib.name}</Link>
+                                )}
                                 <p className="text-sm text-slate-500 dark:text-slate-400">{lib.files.length} documento(s)</p>
                                 {lib.isSystemModel && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Modelo do Sistema)</span>}
                             </div>
