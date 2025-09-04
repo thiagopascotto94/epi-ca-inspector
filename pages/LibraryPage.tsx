@@ -202,6 +202,11 @@ const LibraryPage: React.FC = () => {
                                     <span className="font-semibold text-slate-900 dark:text-white">{lib.name}</span>
                                 )}
                                 <p className="text-sm text-slate-500 dark:text-slate-400">{lib.files.length} documento(s)</p>
+                                {isRootUser && (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                        <span className="font-semibold">{lib.usageCount || 0}</span> usuário(s) utilizando
+                                    </p>
+                                )}
                                 {lib.isSystemModel && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Modelo do Sistema)</span>}
                             </div>
                             <div className="flex gap-2">

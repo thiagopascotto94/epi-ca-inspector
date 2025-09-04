@@ -36,6 +36,7 @@ export interface Library {
   files: LibraryFile[];
   isSystemModel?: boolean;
   systemModelId?: string;
+  usageCount?: number;
 }
 
 export interface SimilarityJob {
