@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cog6ToothIcon, DocumentTextIcon } from './Icon';
+import { Cog6ToothIcon, DocumentTextIcon, ClipboardDocumentIcon } from './Icon';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { IS_DEV_MODE } from '../config';
 import { Theme } from '../types';
@@ -10,11 +10,10 @@ import { User } from 'firebase/auth';
 interface HeaderProps {
     theme: Theme;
     toggleTheme: () => void;
-    onOpenSettings: () => void;
     user: User | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onOpenSettings, user }) => {
+export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, user }) => {
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -31,13 +30,13 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onOpenSettin
                 </div>
                  <div className="flex items-center gap-2">
                     <ThemeSwitcher theme={theme} toggleTheme={toggleTheme} />
-                    {IS_DEV_MODE && (
-                        <button onClick={onOpenSettings} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Configurações">
-                            <Cog6ToothIcon className="w-6 h-6"/>
-                        </button>
-                    )}
                     {user ? (
-                        <button onClick={handleLogout} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">Logout</button>
+                        <>
+                            <button onClick={() => navigate('/library')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors" aria-label="Biblioteca">
+                                <ClipboardDocumentIcon className="w-6 h-6"/>
+                            </button>
+                            <button onClick={handleLogout} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">Logout</button>
+                        </>
                     ) : (
                         <>
                             <button onClick={() => navigate('/login')} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">Login</button>

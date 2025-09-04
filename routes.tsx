@@ -4,6 +4,11 @@ import { lazy, Suspense } from "react";
 const App = lazy(() => import("./App"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+
+const LibraryDetailPage = lazy(() => import("./pages/LibraryDetailPage"));
 
 const router = createBrowserRouter([
   {
@@ -14,10 +19,12 @@ const router = createBrowserRouter([
       </Suspense>
     ),
     children: [
+      { index: true, element: <Dashboard /> },
       { path: "login", element: <LoginPage/> },
       { path: "register", element: <RegisterPage/> },
-      // Redirect any other path to login if not authenticated
-      { path: "*", element: <Navigate to="/login" replace /> }
+      { path: "library", element: <LibraryPage/> },
+      { path: "library/:libraryId", element: <LibraryDetailPage /> },
+      { path: "*", element: <Navigate to="/" replace /> }
     ],
   },
 ]);

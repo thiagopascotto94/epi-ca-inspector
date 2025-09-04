@@ -13,13 +13,13 @@ import { HistoryService } from '../services/historyService';
 import { AIService } from '../services/aiService';
 import { JobService } from '../services/jobService';
 import { LibraryService } from '../services/libraryService';
-import { auth } from '../firebase'; // Import auth to get current user's UID
+import { useOutletContext } from 'react-router-dom';
+import { User } from 'firebase/auth';
 
-interface DashboardProps {
-    uid: string;
-}
+export default function Dashboard() {
+    const { user } = useOutletContext<{ user: User | null }>();
+    const uid = user?.uid;
 
-export default function Dashboard({ uid }: DashboardProps) {
     // Search and CA data state
     const [caNumberInput, setCaNumberInput] = useState('');
     const [comparisonCaNumberInput, setComparisonCaNumberInput] = useState('');
