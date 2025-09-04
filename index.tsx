@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Router as AppRoutes } from './routes';
+import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
 
 if ('serviceWorker' in navigator) {

@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      css: {
+        postcss: './postcss.config.js',
+      },
       server: {
         headers: {
           'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
