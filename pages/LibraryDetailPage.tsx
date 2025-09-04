@@ -80,7 +80,7 @@ const LibraryDetailPage: React.FC = () => {
                     alert(`O arquivo ${url} excede o limite de 1MB ou 900k tokens.`);
                     continue;
                 }
-                const newFile: LibraryFile = { id: uuidv4(), url, content };
+                const newFile: LibraryFile = { id: uuidv4(), name: url, url, content };
                 if (isRootUser) {
                     await LibraryService.addFileToTemplate(libraryId, newFile);
                 } else {
@@ -100,6 +100,57 @@ const LibraryDetailPage: React.FC = () => {
     const handleEditFile = (file: LibraryFile) => {
         if (!libraryId) return;
         navigate(`/library/${libraryId}/file/${file.id}/edit`);
+    };
+
+    const handleAddBlank = async (name: string) => {
+        if (!user || !libraryId || !library) return;
+        if (library.files.length >= 10) {
+            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const newFile: LibraryFile = {
+                id: uuidv4(),
+                name: name,
+                url: 'documento-em-branco',
+                content: `# ${name}\n\n`,
+            };
+            if (isRootUser) {
+                await LibraryService.addFileToTemplate(libraryId, newFile);
+            } else {
+                await LibraryService.addFileToLibrary(user.uid, libraryId, newFile);
+            }
+            await fetchData();
+            setIsAddFileDialogOpen(false);
+            navigate(`/library/${libraryId}/file/${newFile.id}/edit`);
+        } catch (error) {
+            console.error("Failed to add blank file:", error);
+            alert("Ocorreu um erro ao criar o documento em branco.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleRenameFile = async (file: LibraryFile) => {
+        const newName = prompt("Digite o novo nome para o arquivo:", file.name);
+        if (newName && newName.trim() !== "") {
+            const updatedFile = { ...file, name: newName.trim() };
+            setIsLoading(true);
+            try {
+                if (isRootUser) {
+                    await LibraryService.updateFileInTemplate(libraryId!, updatedFile);
+                } else {
+                    await LibraryService.updateFileInLibrary(user!.uid, libraryId!, updatedFile);
+                }
+                await fetchData();
+            } catch (error) {
+                console.error("Failed to rename file:", error);
+                alert("Ocorreu um erro ao renomear o arquivo.");
+            } finally {
+                setIsLoading(false);
+            }
+        }
     };
 
     const handleDeleteFile = async (fileId: string) => {
@@ -151,10 +202,12 @@ const LibraryDetailPage: React.FC = () => {
             {library.files.map((file) => (
                 <li key={file.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                     <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-200">{file.url}</p>
+                        <p className="font-semibold text-slate-800 dark:text-slate-200">{file.name}</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Origem: {file.url}</p>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{enc.encode(file.content || '').length} tokens</p>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={() => handleRenameFile(file)} className="px-3 py-1 bg-yellow-500 text-white font-semibold rounded-md hover:bg-yellow-600 transition-colors">Renomear</button>
                         <button onClick={() => handleEditFile(file)} className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Editar</button>
                         <button onClick={() => handleDeleteFile(file.id)} className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors">Excluir</button>
                     </div>
@@ -193,7 +246,7 @@ const LibraryDetailPage: React.FC = () => {
                 )}
             </div>
 
-            <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} isLoading={isLoading} />
+            <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} onAddBlank={handleAddBlank} isLoading={isLoading} />
         </div>
     );
 };
