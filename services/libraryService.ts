@@ -23,6 +23,21 @@ export class LibraryService {
         }
     }
 
+    static async getLibraryTemplate(templateId: string): Promise<Library | null> {
+        if (!templateId) return null;
+        try {
+            const libDocRef = doc(db, 'library_templates', templateId);
+            const docSnap = await getDoc(libDocRef);
+            if (docSnap.exists()) {
+                return docSnap.data() as Library;
+            }
+            return null;
+        } catch (e) {
+            console.error("Failed to load library template from Firestore", e);
+            return null;
+        }
+    }
+
     static async getLibraryTemplates(): Promise<Library[]> {
         try {
             const querySnapshot = await getDocs(this.getLibraryTemplatesCollectionRef());
@@ -174,6 +189,51 @@ export class LibraryService {
             }
         } catch (e) {
             console.error("Failed to delete file from library", e);
+            throw e;
+        }
+    }
+
+    static async addFileToTemplate(templateId: string, file: LibraryFile): Promise<void> {
+        if (!templateId) return;
+        try {
+            const libDocRef = doc(db, 'library_templates', templateId);
+            await updateDoc(libDocRef, {
+                files: arrayUnion(file)
+            });
+        } catch (e) {
+            console.error("Failed to add file to template", e);
+            throw e;
+        }
+    }
+
+    static async updateFileInTemplate(templateId: string, updatedFile: LibraryFile): Promise<void> {
+        if (!templateId) return;
+        try {
+            const libDocRef = doc(db, 'library_templates', templateId);
+            const template = await this.getLibraryTemplate(templateId);
+            if (template) {
+                const updatedFiles = template.files.map(file =>
+                    file.id === updatedFile.id ? updatedFile : file
+                );
+                await updateDoc(libDocRef, { files: updatedFiles });
+            }
+        } catch (e) {
+            console.error("Failed to update file in template", e);
+            throw e;
+        }
+    }
+
+    static async deleteFileFromTemplate(templateId: string, fileId: string): Promise<void> {
+        if (!templateId) return;
+        try {
+            const libDocRef = doc(db, 'library_templates', templateId);
+            const template = await this.getLibraryTemplate(templateId);
+            if (template) {
+                const updatedFiles = template.files.filter(file => file.id !== fileId);
+                await updateDoc(libDocRef, { files: updatedFiles });
+            }
+        } catch (e) {
+            console.error("Failed to delete file from template", e);
             throw e;
         }
     }
