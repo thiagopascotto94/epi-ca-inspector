@@ -4,6 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { Library, LibraryFile } from '../types';
 import { LibraryService } from '../services/libraryService';
+import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 import AddFileDialog from '../components/AddFileDialog';
 import SearchResults from '../components/SearchResults';
