@@ -30,28 +30,6 @@ export class AIService {
         onProgress: (message: string) => void
     ): Promise<string[]> {
         const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY! });
-        const model = ai.getGenerativeModel({
-            model: "gemini-1.5-flash-latest",
-            safetySettings: [
-                {
-                    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold: HarmBlockThreshold.BLOCK_NONE,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold: HarmBlockThreshold.BLOCK_NONE,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                    threshold: HarmBlockThreshold.BLOCK_NONE,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold: HarmBlockThreshold.BLOCK_NONE,
-                },
-            ]
-        });
-
         const extractedTexts: string[] = [];
 
         for (let i = 0; i < files.length; i++) {
@@ -68,6 +46,7 @@ export class AIService {
                 } else if (file.type === 'application/pdf') {
                     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
                     onProgress(`Processando ${pdf.numPages} páginas do PDF ${file.name}...`);
+                    const imageParts = [];
                     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                         const page = await pdf.getPage(pageNum);
                         const viewport = page.getViewport({ scale: 1.5 });
@@ -75,20 +54,36 @@ export class AIService {
                         const context = canvas.getContext('2d');
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
-                        if(context){
+                        if (context) {
                             await page.render({ canvasContext: context, viewport: viewport }).promise;
                             const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
-                            parts.push({ inlineData: { data: imageBase64, mimeType: 'image/jpeg' } });
+                            imageParts.push({ inlineData: { data: imageBase64, mimeType: 'image/jpeg' } });
                         }
                     }
-                    parts.unshift(prompt);
+                    parts.push(prompt, ...imageParts);
                 } else {
                     continue; // Skip unsupported file types
                 }
 
-                const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
-                const response = result.response;
-                const text = response.text();
+                const request = {
+                    model: "gemini-1.5-flash-latest",
+                    contents: [{ role: 'user', parts }],
+                    safetySettings: [
+                        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    ]
+                };
+
+                const response = await generateContentWithRetry(
+                    ai,
+                    request,
+                    3,
+                    (attempt) => onProgress(`Processando arquivo ${i + 1} de ${files.length}... (Tentativa ${attempt}/3)`)
+                );
+
+                const text = response.candidates[0].content.parts[0].text;
                 extractedTexts.push(`\n\n---\n\n## Conteúdo de: ${file.name}\n\n${text}`);
 
             } catch (error) {
