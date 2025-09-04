@@ -16,7 +16,6 @@ import { LibraryService } from '../services/libraryService';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
-import { Events } from 'react-joyride-react-19';
 
 export default function Dashboard() {
     const { user } = useOutletContext<{ user: User | null }>();
@@ -88,8 +87,10 @@ export default function Dashboard() {
     }, [uid]);
 
     const handleJoyrideCallback = (data: any) => {
-        const { type } = data;
-        if ([Events.TOUR_END, Events.STEP_AFTER].includes(type)) {
+        const { status } = data;
+        const finishedStatuses = ['finished', 'skipped'];
+
+        if (finishedStatuses.includes(status)) {
             setRunOnboarding(false);
             localStorage.setItem('hasSeenDashboardOnboarding', 'true');
         }

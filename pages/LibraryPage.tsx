@@ -9,7 +9,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuthService } from '../authService';
 import { fetchUrlAsText } from '../services/apiService';
 import { LibraryOnboardingJoyride } from '../components/LibraryOnboardingJoyride';
-import { Events } from 'react-joyride-react-19';
 
 interface Source {
     type: 'url' | 'file';
@@ -49,8 +48,10 @@ const LibraryPage: React.FC = () => {
     }, [user, isRootUser]);
 
     const handleJoyrideCallback = (data: any) => {
-        const { type } = data;
-        if ([Events.TOUR_END, Events.STEP_AFTER].includes(type)) {
+        const { status } = data;
+        const finishedStatuses = ['finished', 'skipped'];
+
+        if (finishedStatuses.includes(status)) {
             setRunOnboarding(false);
             localStorage.setItem('hasSeenLibraryOnboarding', 'true');
         }
