@@ -76,12 +76,14 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col">
-                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Arquivo: {file.url}</h2>
+                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white flex-shrink-0">Editar Arquivo: {file.url}</h2>
 
-                <div className="flex-grow grid grid-cols-2 gap-4 overflow-hidden">
+                <div className="flex-grow grid grid-cols-2 gap-4 min-h-0">
                     <div className="flex flex-col h-full">
                         <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Editor</h3>
-                        <MarkdownEditor value={content} onChange={setContent} />
+                        <div className="flex-grow relative">
+                           <MarkdownEditor value={content} onChange={setContent} />
+                        </div>
                     </div>
                     <div className="flex flex-col h-full">
                         <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Preview</h3>
@@ -91,7 +93,7 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
                     </div>
                 </div>
 
-                <div className="mt-4 p-4 border-t border-slate-200 dark:border-slate-700">
+                <div className="flex-shrink-0 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                      <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Adicionar Conteúdo</h3>
                     <div className="flex gap-2 mb-2">
                         <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="Adicionar de URL" className="w-full p-2 border rounded" />
@@ -105,7 +107,7 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
                     </div>
                 </div>
 
-                <div className="flex justify-end gap-4 mt-4">
+                <div className="flex-shrink-0 flex justify-end gap-4 mt-4">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500">
                         Cancelar
                     </button>
