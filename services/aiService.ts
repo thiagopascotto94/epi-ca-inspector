@@ -255,6 +255,8 @@ export class AIService {
                 
                 ${JSON.stringify(caData, null, 2)}
                 
+                **Regras Críticas para Conversão (Prioridade Máxima):**
+                A correspondência do campo 'approvedFor' (Aprovado Para) deve ser de 100%. Este é o critério mais importante. Se não houver um produto em nossa linha que corresponda EXATAMENTE a este campo, a conversão não é possível e você deve indicar isso claramente. Os outros campos (descrição, nome do equipamento, etc.) são secundários e devem ser usados para encontrar o produto mais próximo APÓS a correspondência de 'approvedFor' ser satisfeita.
 
                 **Formato da Resposta (HTML Infográfico com Tailwind CSS):**
 
