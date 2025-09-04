@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Library } from '../types';
+import { LibraryFile } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { fetchUrlAsText } from '../services/apiService';
 
-interface EditLibraryDialogProps {
+interface EditFileDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (library: Library, newContent: string) => void;
-    library: Library | null;
+    onSave: (file: LibraryFile) => void;
+    file: LibraryFile | null;
     isLoading: boolean;
 }
 
 type Tab = 'editor' | 'preview';
 
-const EditLibraryDialog: React.FC<EditLibraryDialogProps> = ({ isOpen, onClose, onSave, library, isLoading }) => {
+const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave, file, isLoading }) => {
     const [content, setContent] = useState('');
     const [activeTab, setActiveTab] = useState<Tab>('editor');
     const [newUrl, setNewUrl] = useState('');
     const [isAddingContent, setIsAddingContent] = useState(false);
 
     useEffect(() => {
-        if (library && library.files.length > 0) {
-            setContent(library.files.map(f => f.content || '').join('\n\n'));
+        if (file) {
+            setContent(file.content || '');
         }
-    }, [library]);
+    }, [file]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -39,10 +39,10 @@ const EditLibraryDialog: React.FC<EditLibraryDialogProps> = ({ isOpen, onClose, 
         };
     }, [isOpen, onClose]);
 
-    if (!isOpen || !library) return null;
+    if (!isOpen || !file) return null;
 
     const handleSave = () => {
-        onSave(library, content);
+        onSave({ ...file, content });
     };
 
     const handleAddFromUrl = async () => {
@@ -78,7 +78,7 @@ const EditLibraryDialog: React.FC<EditLibraryDialogProps> = ({ isOpen, onClose, 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] flex flex-col">
-                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Biblioteca: {library.name}</h2>
+                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Arquivo: {file.url}</h2>
 
                 <div className="mb-4 border-b border-slate-200 dark:border-slate-700">
                     <nav className="-mb-px flex gap-4">
@@ -129,4 +129,4 @@ const EditLibraryDialog: React.FC<EditLibraryDialogProps> = ({ isOpen, onClose, 
     );
 };
 
-export default EditLibraryDialog;
+export default EditFileDialog;

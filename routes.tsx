@@ -8,6 +8,8 @@ const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 
+const LibraryDetailPage = lazy(() => import("./pages/LibraryDetailPage"));
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -21,6 +23,7 @@ const router = createBrowserRouter([
       { path: "login", element: <LoginPage/> },
       { path: "register", element: <RegisterPage/> },
       { path: "library", element: <LibraryPage/> },
+      { path: "library/:libraryId", element: <LibraryDetailPage /> },
       { path: "*", element: <Navigate to="/" replace /> }
     ],
   },

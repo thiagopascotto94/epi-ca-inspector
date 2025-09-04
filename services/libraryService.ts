@@ -1,7 +1,6 @@
 import { db } from '../firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, getDoc } from 'firebase/firestore';
-import { Library } from '../types';
-import { get_encoding } from 'tiktoken';
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { Library, LibraryFile } from '../types';
 
 export class LibraryService {
     private static getLibraryCollectionRef(uid: string) {
@@ -19,6 +18,21 @@ export class LibraryService {
         }
     }
 
+    static async getLibrary(uid: string, libraryId: string): Promise<Library | null> {
+        if (!uid || !libraryId) return null;
+        try {
+            const libDocRef = doc(db, `users/${uid}/libraries`, libraryId);
+            const docSnap = await getDoc(libDocRef);
+            if (docSnap.exists()) {
+                return docSnap.data() as Library;
+            }
+            return null;
+        } catch (e) {
+            console.error("Failed to load library from Firestore", e);
+            return null;
+        }
+    }
+
     static async saveLibrary(uid: string, library: Library): Promise<void> {
         if (!uid) return;
         try {
@@ -33,95 +47,67 @@ export class LibraryService {
     static async deleteLibrary(uid: string, library: Library): Promise<void> {
         if (!uid) return;
         try {
-            const batch = writeBatch(db);
-
-            // Delete the library
             const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
-            batch.delete(libDocRef);
-
-            // Update the user's usage
-            const usageDocRef = doc(db, `users/${uid}/usage/storage`);
-            const usageSnap = await getDoc(usageDocRef);
-            if (usageSnap.exists()) {
-                const currentUsage = usageSnap.data() as { bytes: number, tokens: number };
-                const content = library.files[0]?.content || '';
-                const enc = get_encoding("cl100k_base");
-                const tokens = enc.encode(content).length;
-                const bytes = new TextEncoder().encode(content).length;
-
-                batch.update(usageDocRef, {
-                    bytes: Math.max(0, currentUsage.bytes - bytes),
-                    tokens: Math.max(0, currentUsage.tokens - tokens)
-                });
-            }
-
-            await batch.commit();
+            await deleteDoc(libDocRef);
         } catch (e) {
-            console.error("Failed to delete library and update usage", e);
+            console.error("Failed to delete library", e);
             throw e;
         }
     }
 
-    static async importLibraries(uid: string, importedLibraries: Library[]): Promise<void> {
-        if (!uid || !Array.isArray(importedLibraries)) {
-            console.error("Import failed: invalid data or no user.");
-            return;
-        }
+
+    static async createLibrary(uid: string, library: Library): Promise<void> {
+        if (!uid) return;
         try {
-            const batch = writeBatch(db);
-            importedLibraries.forEach(lib => {
-                const libDocRef = doc(this.getLibraryCollectionRef(uid), lib.id);
-                batch.set(libDocRef, lib);
+            const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
+            await setDoc(libDocRef, library);
+        } catch (e) {
+            console.error("Failed to create library", e);
+            throw e;
+        }
+    }
+
+    static async addFileToLibrary(uid: string, libraryId: string, file: LibraryFile): Promise<void> {
+        if (!uid || !libraryId) return;
+        try {
+            const libDocRef = doc(db, `users/${uid}/libraries`, libraryId);
+            await updateDoc(libDocRef, {
+                files: arrayUnion(file)
             });
-            await batch.commit();
         } catch (e) {
-            console.error("Failed to import libraries to Firestore", e);
+            console.error("Failed to add file to library", e);
             throw e;
         }
     }
 
-    static async createLibrary(uid: string, library: Library, usageUpdate: { bytes: number, tokens: number }): Promise<void> {
-        if (!uid) return;
+    static async updateFileInLibrary(uid: string, libraryId: string, updatedFile: LibraryFile): Promise<void> {
+        if (!uid || !libraryId) return;
         try {
-            const batch = writeBatch(db);
-
-            // Save the new library
-            const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
-            batch.set(libDocRef, library);
-
-            // Update the user's usage
-            const usageDocRef = doc(db, `users/${uid}/usage/storage`);
-            batch.set(usageDocRef, {
-                bytes: usageUpdate.bytes,
-                tokens: usageUpdate.tokens
-            }, { merge: true });
-
-            await batch.commit();
+            const libDocRef = doc(db, `users/${uid}/libraries`, libraryId);
+            const library = await this.getLibrary(uid, libraryId);
+            if (library) {
+                const updatedFiles = library.files.map(file =>
+                    file.id === updatedFile.id ? updatedFile : file
+                );
+                await updateDoc(libDocRef, { files: updatedFiles });
+            }
         } catch (e) {
-            console.error("Failed to create library and update usage", e);
+            console.error("Failed to update file in library", e);
             throw e;
         }
     }
 
-    static async updateLibrary(uid: string, library: Library, usageUpdate: { bytes: number, tokens: number }): Promise<void> {
-        if (!uid) return;
+    static async deleteFileFromLibrary(uid: string, libraryId: string, fileId: string): Promise<void> {
+        if (!uid || !libraryId) return;
         try {
-            const batch = writeBatch(db);
-
-            // Update the library
-            const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
-            batch.set(libDocRef, library, { merge: true });
-
-            // Update the user's usage
-            const usageDocRef = doc(db, `users/${uid}/usage/storage`);
-            batch.set(usageDocRef, {
-                bytes: usageUpdate.bytes,
-                tokens: usageUpdate.tokens
-            }, { merge: true });
-
-            await batch.commit();
+            const libDocRef = doc(db, `users/${uid}/libraries`, libraryId);
+            const library = await this.getLibrary(uid, libraryId);
+            if (library) {
+                const updatedFiles = library.files.filter(file => file.id !== fileId);
+                await updateDoc(libDocRef, { files: updatedFiles });
+            }
         } catch (e) {
-            console.error("Failed to update library and usage", e);
+            console.error("Failed to delete file from library", e);
             throw e;
         }
     }

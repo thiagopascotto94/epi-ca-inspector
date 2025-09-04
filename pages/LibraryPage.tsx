@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { Library, LibraryFile } from '../types';
 import { LibraryService } from '../services/libraryService';
-import { UsageService } from '../services/usageService';
-import { fetchUrlAsText } from '../services/apiService';
 import CreateLibraryDialog from '../components/CreateLibraryDialog';
-import EditLibraryDialog from '../components/EditLibraryDialog';
 import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -19,8 +16,6 @@ const LibraryPage: React.FC = () => {
     const { user } = useOutletContext<{ user: User | null }>();
     const [libraries, setLibraries] = useState<Library[]>([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [selectedLibrary, setSelectedLibrary] = useState<Library | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
@@ -36,11 +31,20 @@ const LibraryPage: React.FC = () => {
 
     const handleCreateLibrary = async (name: string, sources: Source[]) => {
         if (!user) return;
+
+        if (libraries.length >= 5) {
+            alert("Você atingiu o limite de 5 bibliotecas por usuário.");
+            return;
+        }
+
+        if (sources.length > 10) {
+            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            let totalBytes = 0;
-            let totalTokens = 0;
             const newFiles: LibraryFile[] = [];
             const enc = get_encoding("cl100k_base");
 
@@ -59,81 +63,24 @@ const LibraryPage: React.FC = () => {
                 const tokens = enc.encode(content).length;
                 const bytes = new TextEncoder().encode(content).length;
 
-                totalTokens += tokens;
-                totalBytes += bytes;
+                if (bytes > 1 * 1024 * 1024 || tokens > 900 * 1000) {
+                    alert(`O arquivo ${url} excede o limite de 1MB ou 900k tokens.`);
+                    setIsLoading(false);
+                    return;
+                }
 
                 newFiles.push({ id: uuidv4(), url, content });
             }
 
-            const hasEnoughSpace = await UsageService.hasEnoughSpace(user.uid, totalBytes, totalTokens);
-            if (!hasEnoughSpace) {
-                alert('Você não tem espaço suficiente para adicionar esta biblioteca. O limite é de 1MB ou 900k tokens.');
-                setIsLoading(false);
-                return;
-            }
-
             const newLibrary: Library = { id: uuidv4(), name, files: newFiles };
-            const currentUsage = await UsageService.getUsage(user.uid);
-            const updatedUsage = {
-                bytes: currentUsage.bytes + totalBytes,
-                tokens: currentUsage.tokens + totalTokens,
-            };
 
-            await LibraryService.createLibrary(user.uid, newLibrary, updatedUsage);
+            await LibraryService.createLibrary(user.uid, newLibrary);
+
             setLibraries(await LibraryService.getLibraries(user.uid));
             setIsCreateModalOpen(false);
         } catch (error) {
             console.error("Failed to create library:", error);
             alert("Ocorreu um erro ao criar a biblioteca. Por favor, tente novamente.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleEdit = (library: Library) => {
-        setSelectedLibrary(library);
-        setIsEditModalOpen(true);
-    };
-
-    const handleSaveLibrary = async (library: Library, newContent: string) => {
-        if (!user) return;
-        setIsLoading(true);
-
-        try {
-            const enc = get_encoding("cl100k_base");
-
-            const oldContent = library.files.map(f => f.content || '').join('\n\n');
-            const oldTokens = enc.encode(oldContent).length;
-            const oldBytes = new TextEncoder().encode(oldContent).length;
-
-            const newTokens = enc.encode(newContent).length;
-            const newBytes = new TextEncoder().encode(newContent).length;
-
-            const currentUsage = await UsageService.getUsage(user.uid);
-
-            const updatedUsage = {
-                bytes: currentUsage.bytes - oldBytes + newBytes,
-                tokens: currentUsage.tokens - oldTokens + newTokens,
-            };
-
-            if (updatedUsage.bytes > 1 * 1024 * 1024 || updatedUsage.tokens > 900 * 1000) {
-                alert('Você não tem espaço suficiente para salvar as alterações. O limite é de 1MB ou 900k tokens.');
-                setIsLoading(false);
-                return;
-            }
-
-            const updatedLibrary: Library = {
-                ...library,
-                files: [{ id: uuidv4(), url: 'edited', content: newContent }],
-            };
-
-            await LibraryService.updateLibrary(user.uid, updatedLibrary, updatedUsage);
-
-            setLibraries(await LibraryService.getLibraries(user.uid));
-            setIsEditModalOpen(false);
-        } catch (error) {
-            console.error("Failed to save library:", error);
-            alert("Ocorreu um erro ao salvar a biblioteca. Por favor, tente novamente.");
         } finally {
             setIsLoading(false);
         }
@@ -159,23 +106,27 @@ const LibraryPage: React.FC = () => {
                 <button
                     onClick={() => setIsCreateModalOpen(true)}
                     className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors"
+                    disabled={libraries.length >= 5}
                 >
                     Criar Nova Biblioteca
                 </button>
             </div>
+            {libraries.length >= 5 && (
+                <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-4">Você atingiu o limite de 5 bibliotecas.</p>
+            )}
 
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
                 <ul className="space-y-4">
                     {libraries.map((lib) => (
                         <li key={lib.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">{lib.name}</span>
+                            <div>
+                                <Link to={`/library/${lib.id}`} className="font-semibold text-sky-600 dark:text-sky-500 hover:underline">{lib.name}</Link>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{lib.files.length} documento(s)</p>
+                            </div>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => handleEdit(lib)}
-                                    className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
-                                >
-                                    Editar
-                                </button>
+                                <Link to={`/library/${lib.id}`} className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">
+                                    Gerenciar
+                                </Link>
                                 <button
                                     onClick={() => handleDelete(lib)}
                                     className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors"
@@ -195,14 +146,6 @@ const LibraryPage: React.FC = () => {
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 onCreate={handleCreateLibrary}
-                isLoading={isLoading}
-            />
-
-            <EditLibraryDialog
-                isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
-                onSave={handleSaveLibrary}
-                library={selectedLibrary}
                 isLoading={isLoading}
             />
         </div>
