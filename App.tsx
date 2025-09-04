@@ -4,13 +4,11 @@ import { User } from 'firebase/auth';
 import { AuthService } from './authService';
 import { Header } from './components/Header';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
-import { Theme, Library } from './types';
+import { Library } from './types';
 import { LibraryService } from './services/libraryService';
-import { ThemeService } from './services/themeService';
 const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-    const [theme, setTheme] = useState<Theme>(ThemeService.getInitialTheme());
     const [libraries, setLibraries] = useState<Library[]>([]);
     const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void; confirmText?: string; color?: string; } | null>(null);
     const navigate = useNavigate();
@@ -30,14 +28,6 @@ const App: React.FC = () => {
         return () => unsubscribe();
     }, [navigate]);
 
-    useEffect(() => {
-        ThemeService.applyTheme(theme);
-    }, [theme]);
-
-    const toggleTheme = () => {
-        setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
-    };
-
     const handleShowConfirmation = (title: string, message: string, onConfirm: () => void, options?: { confirmText?: string; color?: string }) => {
         setConfirmation({ title, message, onConfirm, ...options });
     };
@@ -51,10 +41,8 @@ const App: React.FC = () => {
     }
 
     return (
-        <div className={`bg-white dark:bg-slate-900 min-h-screen`}>
+        <div className={`bg-white min-h-screen`}>
             <Header 
-                theme={theme} 
-                toggleTheme={toggleTheme} 
                 user={user} 
             />
             <main className="container mx-auto p-4">
