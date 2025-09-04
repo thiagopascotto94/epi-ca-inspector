@@ -51,7 +51,7 @@ const App: React.FC = () => {
     }
 
     return (
-        <div className={`${theme} bg-white dark:bg-slate-900 min-h-screen`}>
+        <div className={`bg-white dark:bg-slate-900 min-h-screen`}>
             <Header 
                 theme={theme} 
                 toggleTheme={toggleTheme} 
