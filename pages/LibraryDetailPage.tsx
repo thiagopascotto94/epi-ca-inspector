@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { Library, LibraryFile } from '../types';
@@ -18,27 +18,45 @@ interface Source {
 const LibraryDetailPage: React.FC = () => {
     const { libraryId } = useParams<{ libraryId: string }>();
     const { user } = useOutletContext<{ user: User | null }>();
+    const navigate = useNavigate();
     const [library, setLibrary] = useState<Library | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isEditFileDialogOpen, setIsEditFileDialogOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<LibraryFile | null>(null);
 
-    const fetchLibrary = async () => {
-        if (user && libraryId) {
+    useEffect(() => {
+        const isRootUser = user?.email === 'thiagopascotto94@outlook.com';
+
+        const fetchData = async () => {
+            if (!user || !libraryId) return;
+
             setIsLoading(true);
-            const fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
+            let fetchedLibrary: Library | null = null;
+
+            if (isRootUser) {
+                // ROOT user fetches a template
+                fetchedLibrary = await LibraryService.getLibraryTemplate(libraryId);
+            } else {
+                // Normal user fetches their own library
+                fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
+                // If it's an imported library, redirect
+                if (fetchedLibrary?.systemModelId) {
+                    navigate('/library');
+                    return;
+                }
+            }
+
             setLibrary(fetchedLibrary);
             setIsLoading(false);
-        }
-    };
+        };
 
-    useEffect(() => {
-        fetchLibrary();
-    }, [user, libraryId]);
+        fetchData();
+    }, [user, libraryId, navigate]);
 
     const handleAddFiles = async (sources: Source[]) => {
         if (!user || !libraryId || !library) return;
+        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
 
         if (library.files.length + sources.length > 10) {
             alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
@@ -70,10 +88,14 @@ const LibraryDetailPage: React.FC = () => {
                 }
 
                 const newFile: LibraryFile = { id: uuidv4(), url, content };
-                await LibraryService.addFileToLibrary(user.uid, libraryId, newFile);
+                if (isRootUser) {
+                    await LibraryService.addFileToTemplate(libraryId, newFile);
+                } else {
+                    await LibraryService.addFileToLibrary(user.uid, libraryId, newFile);
+                }
             }
 
-            await fetchLibrary();
+            await fetchData(); // Re-fetch data
             setIsAddFileDialogOpen(false);
         } catch (error) {
             console.error("Failed to add files:", error);
@@ -90,6 +112,7 @@ const LibraryDetailPage: React.FC = () => {
 
     const handleSaveFile = async (updatedFile: LibraryFile) => {
         if (!user || !libraryId) return;
+        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
 
         const enc = get_encoding("cl100k_base");
         const tokens = enc.encode(updatedFile.content || '').length;
@@ -102,8 +125,12 @@ const LibraryDetailPage: React.FC = () => {
 
         setIsLoading(true);
         try {
-            await LibraryService.updateFileInLibrary(user.uid, libraryId, updatedFile);
-            await fetchLibrary();
+            if (isRootUser) {
+                await LibraryService.updateFileInTemplate(libraryId, updatedFile);
+            } else {
+                await LibraryService.updateFileInLibrary(user.uid, libraryId, updatedFile);
+            }
+            await fetchData(); // Re-fetch data
             setIsEditFileDialogOpen(false);
         } catch (error) {
             console.error("Failed to save file:", error);
@@ -115,10 +142,15 @@ const LibraryDetailPage: React.FC = () => {
 
     const handleDeleteFile = async (fileId: string) => {
         if (!user || !libraryId) return;
+        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
         if (window.confirm("Tem certeza que deseja excluir este arquivo?")) {
             try {
-                await LibraryService.deleteFileFromLibrary(user.uid, libraryId, fileId);
-                await fetchLibrary();
+                if (isRootUser) {
+                    await LibraryService.deleteFileFromTemplate(libraryId, fileId);
+                } else {
+                    await LibraryService.deleteFileFromLibrary(user.uid, libraryId, fileId);
+                }
+                await fetchData(); // Re-fetch data
             } catch (error) {
                 console.error("Failed to delete file:", error);
                 alert("Ocorreu um erro ao excluir o arquivo.");
