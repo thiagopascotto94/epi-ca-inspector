@@ -42,7 +42,7 @@ export class AIService {
 
                 if (file.type.startsWith('image/')) {
                     const imagePart = await fileToGenerativePart(file);
-                    parts.push(prompt, imagePart);
+                    parts.push({ text: prompt }, imagePart);
                 } else if (file.type === 'application/pdf') {
                     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
                     onProgress(`Processando ${pdf.numPages} páginas do PDF ${file.name}...`);
@@ -60,7 +60,7 @@ export class AIService {
                             imageParts.push({ inlineData: { data: imageBase64, mimeType: 'image/jpeg' } });
                         }
                     }
-                    parts.push(prompt, ...imageParts);
+                    parts.push({ text: prompt }, ...imageParts);
                 } else {
                     continue; // Skip unsupported file types
                 }
