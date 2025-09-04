@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { LibraryFile } from '../types';
+import { get_encoding } from 'tiktoken';
 import { LibraryService } from '../services/libraryService';
 import { AIService } from '../services/aiService';
 import MarkdownEditor from '../components/MarkdownEditor';
@@ -27,6 +28,24 @@ const EditFilePage: React.FC = () => {
     const [ocrProgress, setOcrProgress] = useState('');
     const [isExtracting, setIsExtracting] = useState(false);
     const ocrFileInputRef = useRef<HTMLInputElement>(null);
+
+    const MAX_TOKENS = 900000;
+    const MAX_BYTES = 1024 * 1024;
+
+    const stats = useMemo(() => {
+        const enc = get_encoding("cl100k_base");
+        const tokenCount = enc.encode(content).length;
+        const byteCount = new TextEncoder().encode(content).length;
+        const tokenPercentage = (tokenCount / MAX_TOKENS) * 100;
+        const bytePercentage = (byteCount / MAX_BYTES) * 100;
+        return {
+            tokenCount,
+            byteCount,
+            tokenPercentage,
+            bytePercentage,
+            isOverLimit: tokenCount > MAX_TOKENS || byteCount > MAX_BYTES,
+        };
+    }, [content]);
 
 
     useEffect(() => {
@@ -122,16 +141,32 @@ const EditFilePage: React.FC = () => {
         return <div className="text-center p-8">Arquivo não encontrado.</div>;
     }
 
+    const getStatColor = (percentage: number) => {
+        if (percentage > 100) return 'text-red-500';
+        if (percentage > 90) return 'text-yellow-500';
+        return 'text-slate-500 dark:text-slate-400';
+    };
+
     return (
         <div className="flex flex-col h-screen bg-white dark:bg-slate-900">
             <header className="flex-shrink-0 bg-slate-100 dark:bg-slate-800 shadow-md">
-                <div className="container mx-auto p-4 flex justify-between items-center">
-                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">Editando: {file.url}</h1>
+                <div className="container mx-auto p-4 flex justify-between items-center gap-4">
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-white truncate">Editando: {file.name}</h1>
+                    <div className="flex-shrink-0 flex items-center gap-4">
+                        <div className={`text-sm text-right ${getStatColor(stats.bytePercentage)}`}>
+                            <p>{(stats.byteCount / 1024).toFixed(2)} KB / 1024 KB</p>
+                            <p>{stats.bytePercentage.toFixed(2)}% do tamanho</p>
+                        </div>
+                        <div className={`text-sm text-right ${getStatColor(stats.tokenPercentage)}`}>
+                            <p>{stats.tokenCount.toLocaleString()} / {MAX_TOKENS.toLocaleString()} tokens</p>
+                            <p>{stats.tokenPercentage.toFixed(2)}% dos tokens</p>
+                        </div>
+                    </div>
                     <div className="flex gap-4">
                         <button onClick={() => navigate(`/library/${libraryId}`)} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500">
                             Voltar
                         </button>
-                        <button onClick={handleSave} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 disabled:bg-sky-400" disabled={isSaving}>
+                        <button onClick={handleSave} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 disabled:bg-sky-400" disabled={isSaving || stats.isOverLimit}>
                             {isSaving ? 'Salvando...' : 'Salvar'}
                         </button>
                     </div>
