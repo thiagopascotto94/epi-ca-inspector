@@ -35,7 +35,7 @@ const LibraryDetailPage: React.FC = () => {
     };
 
     useEffect(() => {
-        if (user?.email === 'root@root.com') {
+        if (user?.email === 'thiagopascotto94@gmail.com') {
             navigate('/library');
         } else {
             fetchLibrary();

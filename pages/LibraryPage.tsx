@@ -20,7 +20,7 @@ const LibraryPage: React.FC = () => {
     const [libraryTemplates, setLibraryTemplates] = useState<Library[]>([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const isRootUser = user?.email === 'root@root.com';
+    const isRootUser = user?.email === 'thiagopascotto94@gmail.com';
 
     useEffect(() => {
         const fetchLibraries = async () => {

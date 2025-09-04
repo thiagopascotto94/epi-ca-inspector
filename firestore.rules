@@ -11,7 +11,7 @@ service cloud.firestore {
       // Allow all authenticated users to read templates
       allow read: if request.auth != null;
       // Allow only the ROOT user to create, update, and delete templates
-      allow write: if request.auth != null && request.auth.token.email == 'root@root.com';
+      allow write: if request.auth != null && request.auth.token.email == 'thiagopascotto94@gmail.com';
     }
   }
 }

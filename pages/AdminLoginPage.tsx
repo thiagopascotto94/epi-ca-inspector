@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../authService';
 
-const RootLoginPage: React.FC = () => {
+const AdminLoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -11,7 +11,7 @@ const RootLoginPage: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        if (email !== 'root@root.com') {
+        if (email !== 'thiagopascotto94@gmail.com') {
             setError('Acesso permitido apenas para o usuário ROOT.');
             return;
         }
@@ -26,7 +26,7 @@ const RootLoginPage: React.FC = () => {
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
             <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md dark:bg-slate-800">
-                <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-white">Acesso ROOT</h1>
+                <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-white">Acesso Administrador</h1>
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
                         <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
@@ -65,4 +65,4 @@ const RootLoginPage: React.FC = () => {
     );
 };
 
-export default RootLoginPage;
+export default AdminLoginPage;

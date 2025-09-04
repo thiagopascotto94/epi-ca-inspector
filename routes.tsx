@@ -3,7 +3,7 @@ import { lazy, Suspense } from "react";
 
 const App = lazy(() => import("./App"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
-const RootLoginPage = lazy(() => import("./pages/RootLoginPage"));
+const AdminLoginPage = lazy(() => import("./pages/AdminLoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 
@@ -22,7 +22,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Dashboard /> },
       { path: "login", element: <LoginPage/> },
-      { path: "root-login", element: <RootLoginPage/> },
+      { path: "admin/login", element: <AdminLoginPage/> },
       { path: "register", element: <RegisterPage/> },
       { path: "library", element: <LibraryPage/> },
       { path: "library/:libraryId", element: <LibraryDetailPage /> },
