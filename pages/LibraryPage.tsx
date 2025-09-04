@@ -185,7 +185,7 @@ const LibraryPage: React.FC = () => {
                                 {lib.isSystemModel && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Modelo do Sistema)</span>}
                             </div>
                             <div className="flex gap-2">
-                                {!isRootUser && (
+                                {!isRootUser && !lib.systemModelId && (
                                     <Link to={`/library/${lib.id}`} className="px-3 py-1 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">
                                         Gerenciar
                                     </Link>

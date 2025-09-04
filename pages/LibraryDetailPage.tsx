@@ -29,6 +29,10 @@ const LibraryDetailPage: React.FC = () => {
         if (user && libraryId) {
             setIsLoading(true);
             const fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
+            if (fetchedLibrary?.systemModelId) {
+                navigate('/library');
+                return;
+            }
             setLibrary(fetchedLibrary);
             setIsLoading(false);
         }
