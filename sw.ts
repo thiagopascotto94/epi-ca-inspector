@@ -6,7 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, updateDoc, collection, query, orderBy, getDocs } from "firebase/firestore";
 import { getAuth, signInWithCredential, GoogleAuthProvider } from "firebase/auth";
-import { fetchUrlAsText, generateContentWithRetry } from './services/apiService';
+import { generateContentWithRetry } from './services/apiService';
 import { SimilarityJob } from './types';
 
 // --- Firebase Initialization ---
@@ -30,70 +30,6 @@ function initializeFirebase(apiKey: string, uid: string) {
     db = getFirestore(firebaseApp);
     auth = getAuth(firebaseApp);
 }
-
-// --- IndexedDB Setup ---
-const DB_NAME = 'EPIInspectorDB';
-const STORE_NAME = 'jobFiles';
-
-function openIndexedDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-            }
-        };
-
-        request.onsuccess = (event) => {
-            resolve((event.target as IDBOpenDBRequest).result);
-        };
-
-        request.onerror = (event) => {
-            reject('IndexedDB error: ' + (event.target as IDBRequest).error);
-        };
-    });
-}
-
-async function getFileContentFromIndexedDB(fileId: string): Promise<string | null> {
-    const db = await openIndexedDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(fileId);
-
-        request.onsuccess = () => {
-            if (request.result) {
-                resolve(request.result.content);
-            } else {
-                resolve(null);
-            }
-        };
-
-        request.onerror = (event) => {
-            reject('IndexedDB get error: ' + (event.target as IDBRequest).error);
-        };
-    });
-}
-
-async function putFileContentInIndexedDB(fileId: string, content: string): Promise<void> {
-    const db = await openIndexedDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put({ id: fileId, content: content });
-
-        request.onsuccess = () => {
-            resolve();
-        };
-
-        request.onerror = (event) => {
-            reject('IndexedDB put error: ' + (event.target as IDBRequest).error);
-        };
-    });
-}
-
 
 // --- State for Queue and Cancellation ---
 let isJobRunning = false;
@@ -254,76 +190,31 @@ async function runSimilarityJob(jobId: string, uid: string) {
         await updateDoc(jobDocRef, { totalFiles: totalFiles });
         job.totalFiles = totalFiles;
 
-        // 1. Download and store files in IndexedDB
+        // 1. Validate that all files have content
         for (let i = 0; i < totalFiles; i++) {
             if (cancelledJobIds.has(jobId)) {
-                console.log(`Job ${jobId} cancelled during file download.`);
+                console.log(`Job ${jobId} cancelled during file validation.`);
                 cleanup();
                 return;
             }
             const file = libraryFiles[i];
-            const fileId = `${jobId}-${i}`;
-
-            try {
-                await updateDoc(jobDocRef, {
-                    progress: i,
-                    progressMessage: `Baixando arquivo ${i + 1}/${totalFiles}: ${file.url}`
-                });
-                await postJobUpdate(job.id);
-
-                const fileContent = await fetchUrlAsText(file.url);
-                await putFileContentInIndexedDB(fileId, fileContent);
-                console.log(`File ${file.url} (ID: ${fileId}) downloaded and stored in IndexedDB.`);
-
-            } catch (downloadError) {
-                console.error(`Error downloading or storing file ${file.url} (ID: ${fileId}):`, downloadError);
+            if (!file.content) {
+                console.error(`File content for ${file.url} is missing in the job data.`);
                 await updateDoc(jobDocRef, {
                     status: 'failed',
-                    error: `Falha ao baixar ou armazenar o arquivo ${file.url}: ${(downloadError as Error).message}`,
+                    error: `O conteúdo do arquivo ${file.url} não foi encontrado nos dados do trabalho. A análise não pode continuar.`,
                     completedAt: Date.now()
                 });
                 await postJobUpdate(job.id);
                 cleanup();
                 return;
             }
-        }
-
-        // Update progress after all downloads are complete
-        await updateDoc(jobDocRef, {
-            progress: totalFiles,
-            progressMessage: `Todos os ${totalFiles} arquivos baixados e armazenados.`
-        });
-        await postJobUpdate(job.id);
-
-        // 2. Read files from IndexedDB and proceed with AI analysis
-        for (let i = 0; i < totalFiles; i++) {
-            if (cancelledJobIds.has(jobId)) {
-                console.log(`Job ${jobId} cancelled during file reading.`);
-                cleanup();
-                return;
-            }
-            const file = libraryFiles[i];
-            const fileContent = await getFileContentFromIndexedDB(`${jobId}-${i}`); // Assuming ID is jobId-index
-            if (fileContent) {
-                file.content = fileContent;
-                await updateDoc(jobDocRef, {
-                    libraryFiles: job.libraryFiles,
-                    progress: totalFiles + i + 1, // Adjust progress to reflect reading phase
-                    progressMessage: `Arquivo ${i + 1}/${totalFiles} lido do IndexedDB.`
-                });
-                await postJobUpdate(job.id);
-            } else {
-                // This else block should ideally not be hit if the download/store phase was successful
-                console.error(`File content for ${file.url} (ID: ${jobId}-${i}) not found in IndexedDB after download.`);
-                await updateDoc(jobDocRef, {
-                    status: 'failed',
-                    error: `Conteúdo do arquivo ${file.url} não encontrado no IndexedDB após o download.`,
-                    completedAt: Date.now()
-                });
-                await postJobUpdate(job.id);
-                cleanup();
-                return;
-            }
+             // Update progress visually
+            await updateDoc(jobDocRef, {
+                progress: i + 1,
+                progressMessage: `Verificando arquivo ${i + 1}/${totalFiles}: ${file.url}`
+            });
+            await postJobUpdate(job.id);
         }
 
         if (cancelledJobIds.has(jobId)) {
