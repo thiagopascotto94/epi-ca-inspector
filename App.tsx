@@ -6,10 +6,11 @@ import { Header } from './components/Header';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { Theme, Library } from './types';
 import { LibraryService } from './services/libraryService';
+import { ThemeService } from './services/themeService';
 const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-    const [theme, setTheme] = useState<Theme>('light');
+    const [theme, setTheme] = useState<Theme>(ThemeService.getInitialTheme());
     const [libraries, setLibraries] = useState<Library[]>([]);
     const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void; confirmText?: string; color?: string; } | null>(null);
     const navigate = useNavigate();
@@ -28,6 +29,10 @@ const App: React.FC = () => {
         });
         return () => unsubscribe();
     }, [navigate]);
+
+    useEffect(() => {
+        ThemeService.applyTheme(theme);
+    }, [theme]);
 
     const toggleTheme = () => {
         setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
