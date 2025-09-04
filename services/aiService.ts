@@ -1,10 +1,101 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { CAData, Library, SimilarityJob } from '../types';
 import { fetchUrlAsText, fetchUrlAsTextWithRetry, generateContentWithRetry } from './apiService';
 import { IS_DEV_MODE } from '../config';
 import { FIXED_LIBRARIES } from './fixedData';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up the worker source for pdf.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
+
+
+async function fileToGenerativePart(file: File) {
+    const base64EncodedData = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(file);
+    });
+    return {
+        inlineData: { data: base64EncodedData, mimeType: file.type },
+    };
+}
 
 export class AIService {
+
+    static async extractTextFromFiles(
+        files: File[],
+        onProgress: (message: string) => void
+    ): Promise<string[]> {
+        const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY! });
+        const model = ai.getGenerativeModel({
+            model: "gemini-1.5-flash-latest",
+            safetySettings: [
+                {
+                    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold: HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold: HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold: HarmBlockThreshold.BLOCK_NONE,
+                },
+                {
+                    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold: HarmBlockThreshold.BLOCK_NONE,
+                },
+            ]
+        });
+
+        const extractedTexts: string[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            onProgress(`Processando arquivo ${i + 1} de ${files.length}: ${file.name}...`);
+
+            try {
+                const parts: any[] = [];
+                const prompt = `Extraia todo o texto do documento a seguir (que é uma ficha técnica de produto). Organize a informação de forma clara e estruturada, usando cabeçalhos, listas e parágrafos para manter a estrutura do documento original o máximo possível. O resultado deve ser em formato Markdown.`;
+
+                if (file.type.startsWith('image/')) {
+                    const imagePart = await fileToGenerativePart(file);
+                    parts.push(prompt, imagePart);
+                } else if (file.type === 'application/pdf') {
+                    const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
+                    onProgress(`Processando ${pdf.numPages} páginas do PDF ${file.name}...`);
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        const page = await pdf.getPage(pageNum);
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        if(context){
+                            await page.render({ canvasContext: context, viewport: viewport }).promise;
+                            const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+                            parts.push({ inlineData: { data: imageBase64, mimeType: 'image/jpeg' } });
+                        }
+                    }
+                    parts.unshift(prompt);
+                } else {
+                    continue; // Skip unsupported file types
+                }
+
+                const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+                const response = result.response;
+                const text = response.text();
+                extractedTexts.push(`\n\n---\n\n## Conteúdo de: ${file.name}\n\n${text}`);
+
+            } catch (error) {
+                console.error(`Erro ao processar o arquivo ${file.name}:`, error);
+                extractedTexts.push(`\n\n---\n\n## Erro ao processar: ${file.name}\n\nNão foi possível extrair o conteúdo deste arquivo.`);
+            }
+        }
+
+        return extractedTexts;
+    }
 
     static async getKnowledgeContext(libraryId: string, libraries: Library[], onProgress: (message: string) => void): Promise<string[]> {
         let selectedLibrary: Library | undefined;

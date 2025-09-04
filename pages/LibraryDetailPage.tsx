@@ -223,7 +223,7 @@ const LibraryDetailPage: React.FC = () => {
             </div>
 
             <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} isLoading={isLoading} />
-            <EditFileDialog isOpen={isEditFileDialogOpen} onClose={() => setIsEditFileDialogOpen(false)} onSave={handleSaveFile} file={selectedFile} isLoading={isLoading} />
+            <EditFileDialog isOpen={isEditFileDialogOpen} onClose={() => setIsEditFileDialogOpen(false)} onSave={handleSaveFile} file={selectedFile} isLoading={isLoading} isRootUser={isRootUser} />
         </div>
     );
 };

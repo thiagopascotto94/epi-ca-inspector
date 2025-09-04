@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LibraryFile } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { fetchUrlAsText } from '../services/apiService';
+import { AIService } from '../services/aiService';
 import MarkdownEditor from './MarkdownEditor';
 
 interface EditFileDialogProps {
@@ -10,15 +11,19 @@ interface EditFileDialogProps {
     onSave: (file: LibraryFile) => void;
     file: LibraryFile | null;
     isLoading: boolean;
+    isRootUser: boolean;
 }
 
 type Tab = 'editor' | 'preview';
 
-const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave, file, isLoading }) => {
+const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave, file, isLoading, isRootUser }) => {
     const [content, setContent] = useState('');
     const [activeTab, setActiveTab] = useState<Tab>('editor');
     const [newUrl, setNewUrl] = useState('');
     const [isAddingContent, setIsAddingContent] = useState(false);
+    const [ocrFiles, setOcrFiles] = useState<File[]>([]);
+    const [ocrProgress, setOcrProgress] = useState('');
+    const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (file) {
@@ -76,6 +81,40 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
         }
     };
 
+    const handleOcrFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) {
+            const selectedFiles = Array.from(event.target.files);
+            if (selectedFiles.length > 10) {
+                alert("Você pode selecionar no máximo 10 arquivos.");
+                return;
+            }
+            setOcrFiles(selectedFiles);
+        }
+    };
+
+    const handleExtract = async () => {
+        if (ocrFiles.length === 0) return;
+
+        setIsAddingContent(true);
+        setOcrProgress('Iniciando extração...');
+        try {
+            const extractedTexts = await AIService.extractTextFromFiles(ocrFiles, (progressMessage) => {
+                setOcrProgress(progressMessage);
+            });
+            setContent(prev => `${prev}${extractedTexts.join('')}`);
+            setOcrFiles([]);
+            if(ocrFileInputRef.current) {
+                ocrFileInputRef.current.value = '';
+            }
+        } catch (error) {
+            console.error("Failed to extract text with AI:", error);
+            alert("Ocorreu um erro ao extrair o texto dos arquivos.");
+        } finally {
+            setIsAddingContent(false);
+            setOcrProgress('');
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] flex flex-col">
@@ -112,6 +151,31 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
                         <label htmlFor="add-file-upload" className="w-full text-center px-4 py-2 bg-slate-200 rounded cursor-pointer block">Selecionar Arquivos</label>
                         <input id="add-file-upload" type="file" multiple onChange={handleAddFromFile} className="hidden" disabled={isAddingContent} />
                     </div>
+
+                    {isRootUser && (
+                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Extrair Conteúdo com IA (OCR)</h3>
+                            <div className="flex gap-2 mb-2">
+                                <label htmlFor="ocr-file-upload" className="w-full text-center px-4 py-2 bg-indigo-200 dark:bg-indigo-800 rounded cursor-pointer block">
+                                    {ocrFiles.length > 0 ? `${ocrFiles.length} arquivo(s) selecionado(s)` : 'Selecionar Imagens ou PDFs (até 10)'}
+                                </label>
+                                <input
+                                    id="ocr-file-upload"
+                                    ref={ocrFileInputRef}
+                                    type="file"
+                                    multiple
+                                    accept="image/*,application/pdf"
+                                    onChange={handleOcrFileSelect}
+                                    className="hidden"
+                                    disabled={isAddingContent}
+                                />
+                                <button onClick={handleExtract} disabled={isAddingContent || ocrFiles.length === 0} className="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50">
+                                    {isAddingContent ? 'Extraindo...' : 'Extrair e Adicionar'}
+                                </button>
+                            </div>
+                            {ocrProgress && <p className="text-sm text-slate-500 dark:text-slate-400">{ocrProgress}</p>}
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-shrink-0 flex justify-end gap-4 mt-4">
