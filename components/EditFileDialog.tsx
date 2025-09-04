@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LibraryFile } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { fetchUrlAsText } from '../services/apiService';
+import MarkdownEditor from './MarkdownEditor';
 
 interface EditFileDialogProps {
     isOpen: boolean;
@@ -11,11 +12,8 @@ interface EditFileDialogProps {
     isLoading: boolean;
 }
 
-type Tab = 'editor' | 'preview';
-
 const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave, file, isLoading }) => {
     const [content, setContent] = useState('');
-    const [activeTab, setActiveTab] = useState<Tab>('editor');
     const [newUrl, setNewUrl] = useState('');
     const [isAddingContent, setIsAddingContent] = useState(false);
 
@@ -77,29 +75,20 @@ const EditFileDialog: React.FC<EditFileDialogProps> = ({ isOpen, onClose, onSave
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-4xl h-full max-h-[90vh] flex flex-col">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col">
                 <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Editar Arquivo: {file.url}</h2>
 
-                <div className="mb-4 border-b border-slate-200 dark:border-slate-700">
-                    <nav className="-mb-px flex gap-4">
-                        <button onClick={() => setActiveTab('editor')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'editor' ? 'border-b-2 border-sky-500 text-sky-600' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>Editor</button>
-                        <button onClick={() => setActiveTab('preview')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'preview' ? 'border-b-2 border-sky-500 text-sky-600' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>Preview</button>
-                    </nav>
-                </div>
-
-                <div className="flex-grow overflow-hidden">
-                    {activeTab === 'editor' ? (
-                        <textarea
-                            id="markdown-editor"
-                            value={content}
-                            onChange={(e) => setContent(e.target.value)}
-                            className="w-full h-full p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                        />
-                    ) : (
+                <div className="flex-grow grid grid-cols-2 gap-4 overflow-hidden">
+                    <div className="flex flex-col h-full">
+                        <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Editor</h3>
+                        <MarkdownEditor value={content} onChange={setContent} />
+                    </div>
+                    <div className="flex flex-col h-full">
+                        <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">Preview</h3>
                         <div className="prose dark:prose-invert p-4 border border-slate-300 dark:border-slate-600 rounded-md h-full overflow-auto bg-slate-50 dark:bg-slate-900">
                             <ReactMarkdown>{content}</ReactMarkdown>
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 <div className="mt-4 p-4 border-t border-slate-200 dark:border-slate-700">
