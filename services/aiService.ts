@@ -3,10 +3,13 @@ import { CAData, Library, SimilarityJob } from '../types';
 import { fetchUrlAsText, fetchUrlAsTextWithRetry, generateContentWithRetry } from './apiService';
 import { IS_DEV_MODE } from '../config';
 import { FIXED_LIBRARIES } from './fixedData';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 
 // Set up the worker source for pdf.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.mjs',
+    import.meta.url,
+).toString();
 
 
 async function fileToGenerativePart(file: File) {
