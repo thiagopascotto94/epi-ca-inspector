@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AddFileDialog from '../components/AddFileDialog';
 import EditFileDialog from '../components/EditFileDialog';
 import { fetchUrlAsText } from '../services/apiService';
+import { useIsRootUser } from '../hooks/useIsRootUser';
 
 interface Source {
     type: 'url' | 'file';
@@ -24,11 +25,11 @@ const LibraryDetailPage: React.FC = () => {
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isEditFileDialogOpen, setIsEditFileDialogOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<LibraryFile | null>(null);
+    const isRootUser = useIsRootUser(user);
 
     const fetchData = async () => {
         if (!user || !libraryId) return;
 
-        const isRootUser = user?.email === 'thiagopascotto94@outlook.com';
         setIsLoading(true);
         let fetchedLibrary: Library | null = null;
 
@@ -55,7 +56,6 @@ const LibraryDetailPage: React.FC = () => {
 
     const handleAddFiles = async (sources: Source[]) => {
         if (!user || !libraryId || !library) return;
-        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
 
         if (library.files.length + sources.length > 10) {
             alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
@@ -111,7 +111,6 @@ const LibraryDetailPage: React.FC = () => {
 
     const handleSaveFile = async (updatedFile: LibraryFile) => {
         if (!user || !libraryId) return;
-        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
 
         const enc = get_encoding("cl100k_base");
         const tokens = enc.encode(updatedFile.content || '').length;
@@ -141,7 +140,6 @@ const LibraryDetailPage: React.FC = () => {
 
     const handleDeleteFile = async (fileId: string) => {
         if (!user || !libraryId) return;
-        const isRootUser = user.email === 'thiagopascotto94@outlook.com';
         if (window.confirm("Tem certeza que deseja excluir este arquivo?")) {
             try {
                 if (isRootUser) {

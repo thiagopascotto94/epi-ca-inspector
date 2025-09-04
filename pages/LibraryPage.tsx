@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuthService } from '../authService';
 import { fetchUrlAsText } from '../services/apiService';
 import { LibraryOnboardingJoyride } from '../components/LibraryOnboardingJoyride';
+import { useIsRootUser } from '../hooks/useIsRootUser';
 
 interface Source {
     type: 'url' | 'file';
@@ -22,7 +23,7 @@ const LibraryPage: React.FC = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [runOnboarding, setRunOnboarding] = useState(false);
-    const isRootUser = user?.email === 'thiagopascotto94@outlook.com';
+    const isRootUser = useIsRootUser(user);
 
     useEffect(() => {
         const fetchLibraries = async () => {
