@@ -4,10 +4,8 @@ import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { Library, LibraryFile } from '../types';
 import { LibraryService } from '../services/libraryService';
-import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 import AddFileDialog from '../components/AddFileDialog';
-import EditFileDialog from '../components/EditFileDialog';
 import SearchResults from '../components/SearchResults';
 import { fetchUrlAsText } from '../services/apiService';
 import { useIsRootUser } from '../hooks/useIsRootUser';
@@ -29,8 +27,6 @@ const LibraryDetailPage: React.FC = () => {
     const [library, setLibrary] = useState<Library | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
-    const [isEditFileDialogOpen, setIsEditFileDialogOpen] = useState(false);
-    const [selectedFile, setSelectedFile] = useState<LibraryFile | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const isRootUser = useIsRootUser(user);
 
@@ -101,34 +97,8 @@ const LibraryDetailPage: React.FC = () => {
     };
 
     const handleEditFile = (file: LibraryFile) => {
-        setSelectedFile(file);
-        setIsEditFileDialogOpen(true);
-    };
-
-    const handleSaveFile = async (updatedFile: LibraryFile) => {
-        if (!user || !libraryId) return;
-        const enc = get_encoding("cl100k_base");
-        const tokens = enc.encode(updatedFile.content || '').length;
-        const bytes = new TextEncoder().encode(updatedFile.content || '').length;
-        if (bytes > 1 * 1024 * 1024 || tokens > 900 * 1000) {
-            alert(`O arquivo excede o limite de 1MB ou 900k tokens.`);
-            return;
-        }
-        setIsLoading(true);
-        try {
-            if (isRootUser) {
-                await LibraryService.updateFileInTemplate(libraryId, updatedFile);
-            } else {
-                await LibraryService.updateFileInLibrary(user.uid, libraryId, updatedFile);
-            }
-            await fetchData();
-            setIsEditFileDialogOpen(false);
-        } catch (error) {
-            console.error("Failed to save file:", error);
-            alert("Ocorreu um erro ao salvar o arquivo.");
-        } finally {
-            setIsLoading(false);
-        }
+        if (!libraryId) return;
+        navigate(`/library/${libraryId}/file/${file.id}/edit`);
     };
 
     const handleDeleteFile = async (fileId: string) => {
@@ -223,7 +193,6 @@ const LibraryDetailPage: React.FC = () => {
             </div>
 
             <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} isLoading={isLoading} />
-            <EditFileDialog isOpen={isEditFileDialogOpen} onClose={() => setIsEditFileDialogOpen(false)} onSave={handleSaveFile} file={selectedFile} isLoading={isLoading} isRootUser={isRootUser} />
         </div>
     );
 };
