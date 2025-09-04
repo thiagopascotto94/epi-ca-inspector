@@ -22,8 +22,13 @@ export class AIService {
                 for (let i = 0; i < totalFiles; i++) {
                     const file = selectedLibrary.files[i];
                     onProgress(`Carregando arquivo ${i + 1} de ${totalFiles}: ${file.url}...`);
-                    const content = await fetchUrlAsTextWithRetry(file.url);
-                    fileContents.push(content);
+                    if (file.content) {
+                        fileContents.push(file.content);
+                    } else {
+                        // Fallback or error, depending on desired behavior.
+                        // For now, let's assume content is mandatory and throw an error if not found.
+                        throw new Error(`O conteúdo do arquivo ${file.url} não foi encontrado no banco de dados.`);
+                    }
                 }
 
                 // Define a maximum chunk size for the knowledge base
