@@ -200,7 +200,8 @@ export const SearchForm: React.FC<SearchFormProps> = (props) => {
 
                 {caData && comparisonData && (
                     <div className="flex items-end gap-4 border-l border-slate-200 dark:border-slate-700 pl-6">
-                        <button 
+                        <button
+                            id="ai-analysis-button"
                             onClick={handleAiAnalysis} 
                             disabled={isAnalyzing || isLoading} 
                             className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 disabled:bg-sky-400 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"

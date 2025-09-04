@@ -8,6 +8,8 @@ import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthService } from '../authService';
 import { fetchUrlAsText } from '../services/apiService';
+import { LibraryOnboardingJoyride } from '../components/LibraryOnboardingJoyride';
+import { Events } from 'react-joyride-react-19';
 
 interface Source {
     type: 'url' | 'file';
@@ -20,6 +22,7 @@ const LibraryPage: React.FC = () => {
     const [libraryTemplates, setLibraryTemplates] = useState<Library[]>([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [runOnboarding, setRunOnboarding] = useState(false);
     const isRootUser = user?.email === 'thiagopascotto94@outlook.com';
 
     useEffect(() => {
@@ -33,12 +36,25 @@ const LibraryPage: React.FC = () => {
                     setLibraries(userLibraries);
                     const templates = await LibraryService.getLibraryTemplates();
                     setLibraryTemplates(templates);
+
+                    const hasSeenOnboarding = localStorage.getItem('hasSeenLibraryOnboarding');
+                    if (!hasSeenOnboarding) {
+                        setRunOnboarding(true);
+                    }
                 }
             }
         };
 
         fetchLibraries();
     }, [user, isRootUser]);
+
+    const handleJoyrideCallback = (data: any) => {
+        const { type } = data;
+        if ([Events.TOUR_END, Events.STEP_AFTER].includes(type)) {
+            setRunOnboarding(false);
+            localStorage.setItem('hasSeenLibraryOnboarding', 'true');
+        }
+    };
 
     const handleCreateLibrary = async (name: string, sources: Source[], isSystemModel: boolean) => {
         if (!user) return;
@@ -152,11 +168,13 @@ const LibraryPage: React.FC = () => {
 
     return (
         <div className="container mx-auto p-4">
+            <LibraryOnboardingJoyride run={runOnboarding} callback={handleJoyrideCallback} />
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                     {isRootUser ? 'Gerenciamento de Modelos' : 'Bibliotecas de Conhecimento'}
                 </h1>
                 <button
+                    id="create-library-button"
                     onClick={() => setIsCreateModalOpen(true)}
                     className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors"
                     disabled={!isRootUser && libraries.length >= 5}
@@ -168,7 +186,7 @@ const LibraryPage: React.FC = () => {
                 <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-4">Você atingiu o limite de 5 bibliotecas.</p>
             )}
 
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+            <div id="my-libraries-section" className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
                     {isRootUser ? 'Modelos de Biblioteca' : 'Minhas Bibliotecas'}
                 </h2>
@@ -214,16 +232,17 @@ const LibraryPage: React.FC = () => {
             </div>
 
             {!isRootUser && (
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
+                <div id="available-templates-section" className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Modelos Disponíveis</h2>
                     <ul className="space-y-4">
-                        {libraryTemplates.map((template) => (
+                        {libraryTemplates.map((template, index) => (
                             <li key={template.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                                 <div>
                                     <p className="font-semibold text-slate-800 dark:text-slate-100">{template.name}</p>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">{template.files.length} documento(s)</p>
                                 </div>
                                 <button
+                                    id={index === 0 ? 'import-template-button' : undefined}
                                     onClick={() => handleImportLibrary(template)}
                                     className="px-3 py-1 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition-colors"
                                 >
