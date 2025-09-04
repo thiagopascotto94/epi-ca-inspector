@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
                             <button onClick={() => navigate('/')} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Início">
                                 <HomeIcon className="w-6 h-6"/>
                             </button>
-                            <button onClick={() => navigate('/library')} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Biblioteca">
+                            <button id="library-link" onClick={() => navigate('/library')} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Biblioteca">
                                 <ClipboardDocumentIcon className="w-6 h-6"/>
                             </button>
                             <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors">Logout</button>

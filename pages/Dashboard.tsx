@@ -15,6 +15,7 @@ import { JobService } from '../services/jobService';
 import { LibraryService } from '../services/libraryService';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
+import { OnboardingJoyride } from '../components/OnboardingJoyride';
 
 export default function Dashboard() {
     const { user } = useOutletContext<{ user: User | null }>();
@@ -67,6 +68,7 @@ export default function Dashboard() {
     const [findSimilarLibraryId, setFindSimilarLibraryId] = useState('none');
     const [conversionLibraryId, setConversionLibraryId] = useState('none');
     const [findSimilarDescription, setFindSimilarDescription] = useState('');
+    const [runOnboarding, setRunOnboarding] = useState(false);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -74,10 +76,25 @@ export default function Dashboard() {
                 setSearchHistory(await HistoryService.getSearchHistory(uid));
                 setJobs(await JobService.getAllJobs(uid));
                 setLibraries(await LibraryService.getLibraries(uid));
+
+                const hasSeenOnboarding = localStorage.getItem('hasSeenDashboardOnboarding');
+                if (!hasSeenOnboarding) {
+                    setRunOnboarding(true);
+                }
             }
         };
         loadInitialData();
     }, [uid]);
+
+    const handleJoyrideCallback = (data: any) => {
+        const { status } = data;
+        const finishedStatuses = ['finished', 'skipped'];
+
+        if (finishedStatuses.includes(status)) {
+            setRunOnboarding(false);
+            localStorage.setItem('hasSeenDashboardOnboarding', 'true');
+        }
+    };
 
     // New useEffect for Service Worker messages
     useEffect(() => {
@@ -249,6 +266,7 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-8">
+            <OnboardingJoyride run={runOnboarding} callback={handleJoyrideCallback} />
             <SearchForm
                 caNumberInput={caNumberInput}
                 setCaNumberInput={setCaNumberInput}
