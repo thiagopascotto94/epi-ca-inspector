@@ -25,32 +25,31 @@ const LibraryDetailPage: React.FC = () => {
     const [isEditFileDialogOpen, setIsEditFileDialogOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<LibraryFile | null>(null);
 
-    useEffect(() => {
+    const fetchData = async () => {
+        if (!user || !libraryId) return;
+
         const isRootUser = user?.email === 'thiagopascotto94@outlook.com';
+        setIsLoading(true);
+        let fetchedLibrary: Library | null = null;
 
-        const fetchData = async () => {
-            if (!user || !libraryId) return;
-
-            setIsLoading(true);
-            let fetchedLibrary: Library | null = null;
-
-            if (isRootUser) {
-                // ROOT user fetches a template
-                fetchedLibrary = await LibraryService.getLibraryTemplate(libraryId);
-            } else {
-                // Normal user fetches their own library
-                fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
-                // If it's an imported library, redirect
-                if (fetchedLibrary?.systemModelId) {
-                    navigate('/library');
-                    return;
-                }
+        if (isRootUser) {
+            // ROOT user fetches a template
+            fetchedLibrary = await LibraryService.getLibraryTemplate(libraryId);
+        } else {
+            // Normal user fetches their own library
+            fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
+            // If it's an imported library, redirect
+            if (fetchedLibrary?.systemModelId) {
+                navigate('/library');
+                return;
             }
+        }
 
-            setLibrary(fetchedLibrary);
-            setIsLoading(false);
-        };
+        setLibrary(fetchedLibrary);
+        setIsLoading(false);
+    };
 
+    useEffect(() => {
         fetchData();
     }, [user, libraryId, navigate]);
 
