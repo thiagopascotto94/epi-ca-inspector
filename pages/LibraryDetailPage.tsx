@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { Library, LibraryFile } from '../types';
@@ -18,6 +18,7 @@ interface Source {
 const LibraryDetailPage: React.FC = () => {
     const { libraryId } = useParams<{ libraryId: string }>();
     const { user } = useOutletContext<{ user: User | null }>();
+    const navigate = useNavigate();
     const [library, setLibrary] = useState<Library | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
@@ -34,8 +35,12 @@ const LibraryDetailPage: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchLibrary();
-    }, [user, libraryId]);
+        if (user?.email === 'root@root.com') {
+            navigate('/library');
+        } else {
+            fetchLibrary();
+        }
+    }, [user, libraryId, navigate]);
 
     const handleAddFiles = async (sources: Source[]) => {
         if (!user || !libraryId || !library) return;

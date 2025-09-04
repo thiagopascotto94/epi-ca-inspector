@@ -8,14 +8,16 @@ interface Source {
 interface CreateLibraryDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onCreate: (name: string, sources: Source[]) => void;
+    onCreate: (name: string, sources: Source[], isSystemModel: boolean) => void;
     isLoading: boolean;
+    isRootUser: boolean;
 }
 
-const CreateLibraryDialog: React.FC<CreateLibraryDialogProps> = ({ isOpen, onClose, onCreate, isLoading }) => {
+const CreateLibraryDialog: React.FC<CreateLibraryDialogProps> = ({ isOpen, onClose, onCreate, isLoading, isRootUser }) => {
     const [name, setName] = useState('');
     const [sources, setSources] = useState<Source[]>([]);
     const [urlInput, setUrlInput] = useState('');
+    const [isSystemModel, setIsSystemModel] = useState(false);
 
     if (!isOpen) return null;
 
@@ -39,16 +41,20 @@ const CreateLibraryDialog: React.FC<CreateLibraryDialogProps> = ({ isOpen, onClo
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate(name, sources);
+        onCreate(name, sources, isSystemModel);
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-2xl">
-                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Criar Nova Biblioteca</h2>
+                <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">
+                    {isRootUser ? 'Criar Novo Modelo' : 'Criar Nova Biblioteca'}
+                </h2>
                 <form onSubmit={handleSubmit}>
                     <div className="mb-4">
-                        <label htmlFor="library-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome da Biblioteca</label>
+                        <label htmlFor="library-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            {isRootUser ? 'Nome do Modelo' : 'Nome da Biblioteca'}
+                        </label>
                         <input
                             id="library-name"
                             type="text"
@@ -58,6 +64,20 @@ const CreateLibraryDialog: React.FC<CreateLibraryDialogProps> = ({ isOpen, onClo
                             required
                         />
                     </div>
+
+                    {isRootUser && (
+                        <div className="mb-4">
+                            <label className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={isSystemModel}
+                                    onChange={(e) => setIsSystemModel(e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                />
+                                <span className="ml-2 text-sm text-slate-700 dark:text-slate-300">É um modelo do sistema?</span>
+                            </label>
+                        </div>
+                    )}
 
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Adicionar Fontes</label>

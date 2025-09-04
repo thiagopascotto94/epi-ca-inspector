@@ -31,9 +31,11 @@ export interface LibraryFile {
 }
 
 export interface Library {
-  id: string;
+  id:string;
   name: string;
   files: LibraryFile[];
+  isSystemModel?: boolean;
+  systemModelId?: string;
 }
 
 export interface SimilarityJob {

@@ -7,6 +7,10 @@ export class LibraryService {
         return collection(db, `users/${uid}/libraries`);
     }
 
+    private static getLibraryTemplatesCollectionRef() {
+        return collection(db, 'library_templates');
+    }
+
     static async getLibraries(uid: string): Promise<Library[]> {
         if (!uid) return [];
         try {
@@ -14,6 +18,16 @@ export class LibraryService {
             return querySnapshot.docs.map(doc => doc.data() as Library);
         } catch (e) {
             console.error("Failed to load libraries from Firestore", e);
+            return [];
+        }
+    }
+
+    static async getLibraryTemplates(): Promise<Library[]> {
+        try {
+            const querySnapshot = await getDocs(this.getLibraryTemplatesCollectionRef());
+            return querySnapshot.docs.map(doc => doc.data() as Library);
+        } catch (e) {
+            console.error("Failed to load library templates from Firestore", e);
             return [];
         }
     }
@@ -55,14 +69,58 @@ export class LibraryService {
         }
     }
 
-
-    static async createLibrary(uid: string, library: Library): Promise<void> {
+    static async updateLibraryFromTemplate(uid: string, library: Library, template: Library): Promise<void> {
         if (!uid) return;
         try {
+            const updatedLibrary = { ...library, files: template.files };
             const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
-            await setDoc(libDocRef, library);
+            await setDoc(libDocRef, updatedLibrary);
         } catch (e) {
-            console.error("Failed to create library", e);
+            console.error("Failed to update library from template", e);
+            throw e;
+        }
+    }
+
+
+    static async createLibrary(uid: string, library: Library, isTemplate: boolean = false): Promise<void> {
+        if (isTemplate) {
+            try {
+                const libDocRef = doc(this.getLibraryTemplatesCollectionRef(), library.id);
+                await setDoc(libDocRef, library);
+            } catch (e) {
+                console.error("Failed to create library template", e);
+                throw e;
+            }
+        } else {
+            if (!uid) return;
+            try {
+                const libDocRef = doc(this.getLibraryCollectionRef(uid), library.id);
+                await setDoc(libDocRef, library);
+            } catch (e) {
+                console.error("Failed to create library", e);
+                throw e;
+            }
+        }
+    }
+
+    static async deleteLibraryTemplate(templateId: string): Promise<void> {
+        try {
+            const libDocRef = doc(this.getLibraryTemplatesCollectionRef(), templateId);
+            await deleteDoc(libDocRef);
+        } catch (e) {
+            console.error("Failed to delete library template", e);
+            throw e;
+        }
+    }
+
+    static async importLibraryTemplate(uid: string, template: Library): Promise<void> {
+        if (!uid) return;
+        try {
+            const newLibrary = { ...template, id: template.id, systemModelId: template.id };
+            const libDocRef = doc(this.getLibraryCollectionRef(uid), newLibrary.id);
+            await setDoc(libDocRef, newLibrary);
+        } catch (e) {
+            console.error("Failed to import library template", e);
             throw e;
         }
     }
