@@ -16,6 +16,7 @@ import { LibraryService } from '../services/libraryService';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
+import { useIsRootUser } from '../hooks/useIsRootUser';
 
 export default function Dashboard() {
     const { user } = useOutletContext<{ user: User | null }>();

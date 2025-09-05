@@ -110,6 +110,34 @@ const EditFilePage: React.FC = () => {
         }
     };
 
+    const playNotificationSound = () => {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+    };
+
+    const showNotification = (title: string, body: string) => {
+        if (Notification.permission === 'granted') {
+            new Notification(title, { body });
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    new Notification(title, { body });
+                }
+            });
+        }
+    };
+
     const handleExtract = async () => {
         if (ocrFiles.length === 0) return;
 
@@ -119,6 +147,12 @@ const EditFilePage: React.FC = () => {
             const extractedTexts = await AIService.extractTextFromFiles(ocrFiles, (progressMessage) => {
                 setOcrProgress(progressMessage);
             });
+
+            if (isRootUser) {
+                playNotificationSound();
+                showNotification('Extração de Texto Concluída', 'O conteúdo foi extraído e adicionado ao editor.');
+            }
+
             setContent(prev => `${prev}${extractedTexts.join('')}`);
             setOcrFiles([]);
             if(ocrFileInputRef.current) {
