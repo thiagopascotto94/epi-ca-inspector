@@ -75,3 +75,11 @@ export interface ConfirmationState {
     confirmButtonText?: string;
     confirmButtonColor?: string;
 }
+
+export interface ClientStats {
+  id: string;
+  email: string;
+  libraries: number;
+  documents: number;
+  searches: number;
+}

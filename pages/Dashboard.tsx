@@ -16,10 +16,13 @@ import { LibraryService } from '../services/libraryService';
 import { useOutletContext } from 'react-router-dom';
 import { User } from 'firebase/auth';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
+import { useIsRootUser } from '../hooks/useIsRootUser';
+import { ClientStatsDashboard } from '../components/ClientStatsDashboard';
 
 export default function Dashboard() {
     const { user } = useOutletContext<{ user: User | null }>();
     const uid = user?.uid;
+    const isRootUser = useIsRootUser(user);
 
     // Search and CA data state
     const [caNumberInput, setCaNumberInput] = useState('');
@@ -266,6 +269,7 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-8">
+            {isRootUser && <ClientStatsDashboard />}
             <OnboardingJoyride run={runOnboarding} callback={handleJoyrideCallback} />
             <SearchForm
                 caNumberInput={caNumberInput}
