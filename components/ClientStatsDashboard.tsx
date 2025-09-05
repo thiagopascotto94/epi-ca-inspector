@@ -7,9 +7,11 @@ export const ClientStatsDashboard: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        console.log("ClientStatsDashboard is rendering.");
         const fetchStats = async () => {
             try {
                 const clientStats = await RootService.getClientsStats();
+                console.log("Fetched client stats:", clientStats);
                 setStats(clientStats);
             } catch (error) {
                 console.error("Failed to fetch client stats:", error);
@@ -23,6 +25,15 @@ export const ClientStatsDashboard: React.FC = () => {
 
     if (isLoading) {
         return <div>Loading client statistics...</div>;
+    }
+
+    if (stats.length === 0) {
+        return (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <h2 className="text-2xl font-bold mb-4">Client Statistics</h2>
+                <p>No client statistics to display.</p>
+            </div>
+        );
     }
 
     return (

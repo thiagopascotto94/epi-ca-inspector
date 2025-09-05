@@ -6,7 +6,10 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 
+import PrivateRoute from "./components/PrivateRoute";
+
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ClientStatsPage = lazy(() => import("./pages/ClientStatsPage"));
 
 const LibraryDetailPage = lazy(() => import("./pages/LibraryDetailPage"));
 const EditFilePage = lazy(() => import("./pages/EditFilePage"));
@@ -26,6 +29,14 @@ const router = createBrowserRouter([
       { path: "library", element: <LibraryPage/> },
       { path: "library/:libraryId", element: <LibraryDetailPage /> },
       { path: "library/:libraryId/file/:fileId/edit", element: <EditFilePage /> },
+      {
+        path: "client-stats",
+        element: (
+          <PrivateRoute>
+            <ClientStatsPage />
+          </PrivateRoute>
+        ),
+      },
       { path: "*", element: <Navigate to="/" replace /> }
     ],
   },
