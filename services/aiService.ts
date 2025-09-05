@@ -66,7 +66,7 @@ export class AIService {
                 }
 
                 const request = {
-                    model: "gemini-1.5-flash-latest",
+                    model: import.meta.env.VITE_GEMINI_FLASH_LATEST_MODEL || "gemini-1.5-flash-latest",
                     contents: [{ role: 'user', parts }],
                     safetySettings: [
                         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -250,7 +250,7 @@ export class AIService {
             try {
                 const response = await generateContentWithRetry(
                     ai,
-                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
+                    { model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL || 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
                     3,
                     (attempt) => onProgress(`Analisando parte ${i + 1} de ${totalChunks}... (Tentativa ${attempt}/3)`)
                 );
@@ -282,7 +282,7 @@ export class AIService {
             try {
                 const finalResponse = await generateContentWithRetry(
                     ai,
-                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
+                    { model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL || 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
                     3,
                     (attempt) => onProgress(`Sintetizando resultados... (Tentativa ${attempt}/3)`)
                 );
@@ -394,7 +394,7 @@ export class AIService {
             try {
                 const response = await generateContentWithRetry(
                     ai,
-                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
+                    { model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL || 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: prompt }] }] },
                     3,
                     (attempt) => onProgress(`Analisando parte ${i + 1} de ${totalChunks}... (Tentativa ${attempt}/3)`)
                 );
@@ -430,7 +430,7 @@ export class AIService {
             try {
                 const finalResponse = await generateContentWithRetry(
                     ai,
-                    { model: 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
+                    { model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL || 'gemini-2.0-flash-lite', contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }] },
                     3,
                     (attempt) => onProgress(`Sintetizando sugestões... (Tentativa ${attempt}/3)`)
                 );

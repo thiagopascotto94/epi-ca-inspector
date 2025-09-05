@@ -1,36 +1,52 @@
 import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, collectionGroup, query } from 'firebase/firestore';
 import { ClientStats, Library } from '../types';
 
 export class RootService {
     static async getClientsStats(): Promise<ClientStats[]> {
         try {
+            // 1. Get all users
             const usersCollectionRef = collection(db, 'users');
             const usersSnapshot = await getDocs(usersCollectionRef);
-            const clientsStats: ClientStats[] = [];
+            const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as { email: string } }));
 
-            for (const userDoc of usersSnapshot.docs) {
-                const userData = userDoc.data();
-                const userId = userDoc.id;
+            // 2. Get all libraries using a collection group query
+            const librariesQuery = query(collectionGroup(db, 'libraries'));
+            const librariesSnapshot = await getDocs(librariesQuery);
+            const librariesByUser = new Map<string, { count: number, documents: number }>();
 
-                const librariesCollectionRef = collection(db, `users/${userId}/libraries`);
-                const librariesSnapshot = await getDocs(librariesCollectionRef);
-                const libraries = librariesSnapshot.docs.map(doc => doc.data() as Library);
+            librariesSnapshot.forEach(doc => {
+                const library = doc.data() as Library;
+                const userId = doc.ref.parent.parent?.id;
+                if (userId) {
+                    const userLibraries = librariesByUser.get(userId) || { count: 0, documents: 0 };
+                    userLibraries.count += 1;
+                    userLibraries.documents += library.files?.length || 0;
+                    librariesByUser.set(userId, userLibraries);
+                }
+            });
 
-                const documentsCount = libraries.reduce((acc, library) => acc + (library.files?.length || 0), 0);
+            // 3. Get all search histories using a collection group query
+            const searchHistoryQuery = query(collectionGroup(db, 'searchHistory'));
+            const searchHistorySnapshot = await getDocs(searchHistoryQuery);
+            const searchesByUser = new Map<string, number>();
 
-                const searchHistoryCollectionRef = collection(db, `users/${userId}/searchHistory`);
-                const searchHistorySnapshot = await getDocs(searchHistoryCollectionRef);
-                const searchesCount = searchHistorySnapshot.size;
+            searchHistorySnapshot.forEach(doc => {
+                const userId = doc.ref.parent.parent?.id;
+                if (userId) {
+                    const userSearches = searchesByUser.get(userId) || 0;
+                    searchesByUser.set(userId, userSearches + 1);
+                }
+            });
 
-                clientsStats.push({
-                    id: userId,
-                    email: userData.email,
-                    libraries: libraries.length,
-                    documents: documentsCount,
-                    searches: searchesCount,
-                });
-            }
+            // 4. Combine the data
+            const clientsStats: ClientStats[] = users.map(user => ({
+                id: user.id,
+                email: user.email,
+                libraries: librariesByUser.get(user.id)?.count || 0,
+                documents: librariesByUser.get(user.id)?.documents || 0,
+                searches: searchesByUser.get(user.id) || 0,
+            }));
 
             return clientsStats;
         } catch (error) {
