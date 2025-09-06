@@ -153,6 +153,46 @@ async function runSimilarityJob(jobId: string, uid: string) {
     }
 
     const jobDocRef = doc(db, `users/${uid}/jobs`, jobId);
+    const userDocRef = doc(db, `users/${uid}`);
+
+    try {
+        const userDoc = await getDoc(userDocRef);
+        if (!userDoc.exists()) {
+            throw new Error("User document not found.");
+        }
+        const userData = userDoc.data();
+
+        const planDoc = await getDoc(doc(db, "plans", userData.planId));
+        if (!planDoc.exists()) {
+            throw new Error("Plan document not found.");
+        }
+        const planData = planDoc.data();
+
+        if (userData.similarSearchesCount >= planData.similarSearchesLimit) {
+            await updateDoc(jobDocRef, {
+                status: 'failed',
+                error: 'You have exceeded your monthly limit for similar searches. Please upgrade your plan.',
+                completedAt: Date.now()
+            });
+            await postJobUpdate(jobId);
+            return;
+        }
+
+        // Increment search count
+        await updateDoc(userDocRef, {
+            similarSearchesCount: (userData.similarSearchesCount || 0) + 1
+        });
+
+    } catch (e) {
+        console.error(`Usage check failed for job ${jobId}:`, e);
+        await updateDoc(jobDocRef, {
+            status: 'failed',
+            error: 'Failed to verify usage limits. Please try again.',
+            completedAt: Date.now()
+        });
+        await postJobUpdate(jobId);
+        return;
+    }
     let jobSnapshot = await getDoc(jobDocRef);
     let job = jobSnapshot.data() as SimilarityJob;
 

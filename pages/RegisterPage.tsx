@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthService } from "../authService";
+import { db } from "../firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -15,8 +17,18 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.register(email, password);
-      navigate("/dashboard");
+      const user = await AuthService.register(email, password);
+
+      // Create a document for the user in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        planId: "free", // "free" is the ID of the free plan
+        caQueriesCount: 0,
+        similarSearchesCount: 0,
+        usageLastReset: new Date()
+      });
+
+      navigate("/");
     } catch (error: any) {
       setError("Falha no registro. O e-mail pode já estar em uso ou a senha é muito fraca.");
       console.error(error);

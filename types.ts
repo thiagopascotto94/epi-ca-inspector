@@ -83,3 +83,26 @@ export interface ClientStats {
   documents: number;
   searches: number;
 }
+
+export interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  caQueriesLimit: number;
+  similarSearchesLimit: number;
+  description: string;
+}
+
+export interface Payment {
+  id: string;
+  userId: string;
+  planId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  stripePaymentId: string;
+}

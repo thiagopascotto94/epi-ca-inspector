@@ -4,6 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthService } from "../authService";
 import { useDialog } from "../hooks/useDialog";
 import { PromptDialog } from "../components/PromptDialog";
+import { db } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +22,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await AuthService.login(email, password);
-      navigate("/dashboard");
+      navigate("/");
     } catch (error: any) {
       setError("Falha no login. Verifique seu e-mail e senha.");
       console.error(error);
@@ -33,8 +35,23 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.loginWithGoogle();
-      navigate("/dashboard");
+      const user = await AuthService.loginWithGoogle();
+
+      // Check if user document exists, if not, create it
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        await setDoc(userDocRef, {
+          email: user.email,
+          planId: "free",
+          caQueriesCount: 0,
+          similarSearchesCount: 0,
+          usageLastReset: new Date()
+        });
+      }
+
+      navigate("/");
     } catch (error: any) {
       setError("Falha no login com o Google.");
       console.error(error);

@@ -155,7 +155,7 @@ export default function Dashboard() {
     }, [isFindingSimilar]); // Depend on isFindingSimilar to re-register if job status changes
 
     const handleFetchAndParse = async (caNumber: string, target: 'primary' | 'secondary') => {
-        if (!caNumber) return;
+        if (!caNumber || !uid) return;
 
         setIsLoading(true);
         setLoadingTarget(target);
@@ -164,7 +164,7 @@ export default function Dashboard() {
         if (target === 'secondary') setComparisonData(null);
 
         try {
-            const data = await CAScraperService.fetchAndParse(caNumber, (message) => setLoadingMessage(message));
+            const data = await CAScraperService.fetchAndParse(caNumber, uid, (message) => setLoadingMessage(message));
             if (target === 'primary') {
                 setCaData(data);
                 await HistoryService.addSearchHistory(uid, caNumber);

@@ -1,4 +1,6 @@
 import { CAData } from '../types';
+import { db } from '../firebase';
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 
 // Helper function to safely query and extract text
 const queryText = (scope: Document | Element, selector: string): string => {
@@ -83,10 +85,34 @@ export class CAScraperService {
       }
     }
 
-    static async fetchAndParse(caNumber: string, onProgress: (message: string) => void): Promise<CAData> {
+    static async fetchAndParse(caNumber: string, uid: string, onProgress: (message: string) => void): Promise<CAData> {
+        onProgress('Verificando limites de uso...');
+        const userDocRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+            throw new Error("User not found.");
+        }
+
+        const userData = userDoc.data();
+        const planId = userData.planId;
+
+        const planDocRef = doc(db, "plans", planId);
+        const planDoc = await getDoc(planDocRef);
+
+        if (!planDoc.exists()) {
+            throw new Error("Plan not found.");
+        }
+
+        const planData = planDoc.data();
+
+        if (userData.caQueriesCount >= planData.caQueriesLimit) {
+            throw new Error("You have exceeded your monthly limit for CA queries. Please upgrade your plan.");
+        }
+
         onProgress('Construindo URL...');
         const url = `https://consultaca.com/${caNumber}`;
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
 
         try {
             onProgress('Buscando dados...');
@@ -102,6 +128,10 @@ export class CAScraperService {
             if (!parsedData) {
                 throw new Error('Não foi possível analisar os dados do CA. O formato da página pode ter mudado.');
             }
+
+            await updateDoc(userDocRef, {
+                caQueriesCount: increment(1)
+            });
 
             onProgress('Concluído!');
             return parsedData;
