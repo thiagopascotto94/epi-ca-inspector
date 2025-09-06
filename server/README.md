@@ -5,7 +5,7 @@ This directory contains the Node.js backend for the application, built with Expr
 ## Features
 
 - **REST API**: For managing users, libraries, and background jobs.
-- **Authentication**: JWT-based authentication with root user privileges.
+- **Authentication**: JWT-based authentication with root user privileges, supporting both email/password and social login via Firebase.
 - **Database**: Uses PostgreSQL with Sequelize for object-relational mapping.
 - **Background Jobs**: Long-running AI tasks are processed in the background using BullMQ and Redis.
 - **Process Management**: Uses PM2 to manage the API server and the AI worker as separate processes.
@@ -48,6 +48,7 @@ This directory contains the Node.js backend for the application, built with Expr
     - `JWT_SECRET`: A long, random, and secret string for signing JWTs.
     - `GEMINI_API_KEY`: Your API key for the Google Gemini service.
     - `ROOT_USER_EMAIL`: The email address of the user who should have ROOT privileges.
+    - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`: Credentials from your Firebase project's service account JSON file. The private key often has `\n` characters; ensure they are preserved correctly in the .env file.
 
 ### 3. Database Migration
 
@@ -94,6 +95,8 @@ npm run pm2:start
 
 All API routes are prefixed with `/api`.
 
--   `/api/auth`: User registration and login.
+-   `/api/auth/register`: Register a new user with email and password.
+-   `/api/auth/login`: Log in with email and password.
+-   `/api/auth/social-login`: Log in or register via a Firebase ID token.
 -   `/api/libraries`: CRUD operations for user libraries and files. Includes routes for managing templates (ROOT only).
 -   `/api/jobs`: Creating and checking the status of background AI jobs.

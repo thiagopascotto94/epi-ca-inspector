@@ -2,12 +2,23 @@ import { Request, Response } from 'express';
 import { User } from '../models';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import admin from '../config/firebase-admin';
+import crypto from 'crypto';
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 const ROOT_USER_EMAIL = process.env.ROOT_USER_EMAIL;
+
+// Helper to generate a local JWT
+const generateLocalToken = (user: User) => {
+    return jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+    );
+};
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -30,9 +41,7 @@ export const register = async (req: Request, res: Response) => {
             role,
         });
 
-        // Do not return password in the response
         const userResponse = { id: user.id, email: user.email, role: user.role };
-
         res.status(201).json({ message: 'User created successfully', user: userResponse });
 
     } catch (error) {
@@ -59,16 +68,54 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
-        );
-
+        const token = generateLocalToken(user);
         res.status(200).json({ token });
 
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Internal server error during login' });
+    }
+};
+
+export const socialLogin = async (req: Request, res: Response) => {
+    try {
+        const { idToken } = req.body;
+        if (!idToken) {
+            return res.status(400).json({ message: 'Firebase ID token is required' });
+        }
+
+        if (!admin.apps.length) {
+            return res.status(500).json({ message: 'Firebase Admin SDK not initialized. Social login is disabled.' });
+        }
+
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const { email } = decodedToken;
+
+        if (!email) {
+            return res.status(400).json({ message: 'Email not found in Firebase token.' });
+        }
+
+        let user = await User.findOne({ where: { email } });
+
+        if (!user) {
+            // User does not exist, create a new one
+            const role = email === ROOT_USER_EMAIL ? 'ROOT' : 'USER';
+            user = await User.create({
+                email,
+                // Generate a secure random password as it's required by the model, but won't be used
+                password: crypto.randomBytes(32).toString('hex'),
+                role,
+            });
+        }
+
+        const token = generateLocalToken(user);
+        res.status(200).json({ token });
+
+    } catch (error: any) {
+        console.error('Social login error:', error);
+        if (error.code === 'auth/id-token-expired' || error.code === 'auth/argument-error') {
+            return res.status(401).json({ message: 'Invalid or expired Firebase token.' });
+        }
+        res.status(500).json({ message: 'Internal server error during social login' });
     }
 };
