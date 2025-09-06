@@ -5,6 +5,7 @@ import sequelize from './config/database';
 import authRoutes from './auth/auth.routes';
 import libraryRoutes from './library/library.routes';
 import jobRoutes from './job/job.routes';
+import caRoutes from './ca/ca.routes';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -21,6 +22,7 @@ const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/libraries', libraryRoutes);
 apiRouter.use('/jobs', jobRoutes);
+apiRouter.use('/cas', caRoutes);
 
 app.use('/api', apiRouter);
 

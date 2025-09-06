@@ -9,6 +9,7 @@ This directory contains the Node.js backend for the application, built with Expr
 - **Database**: Uses PostgreSQL with Sequelize for object-relational mapping.
 - **Background Jobs**: Long-running AI tasks are processed in the background using BullMQ and Redis.
 - **Process Management**: Uses PM2 to manage the API server and the AI worker as separate processes.
+- **CA Caching**: Fetches and caches CA (Certificado de Aprovação) data with a 7-day refresh policy.
 
 ## Getting Started
 
@@ -100,3 +101,4 @@ All API routes are prefixed with `/api`.
 -   `/api/auth/social-login`: Log in or register via a Firebase ID token.
 -   `/api/libraries`: CRUD operations for user libraries and files. Includes routes for managing templates (ROOT only).
 -   `/api/jobs`: Creating and checking the status of background AI jobs.
+-   `/api/cas/:caNumber`: Fetches data for a specific CA, using a 7-day cache.
