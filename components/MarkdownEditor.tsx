@@ -11,6 +11,43 @@ interface MarkdownEditorProps {
     onChange: (value: string) => void;
 }
 
+const editorExtensions = [
+    markdown({ base: markdownLanguage, codeLanguages: languages }),
+    EditorView.theme({
+        '&': {
+            backgroundColor: '#1e293b !important',
+            color: 'white',
+        },
+        '.cm-gutters': {
+            backgroundColor: '#1e293b !important',
+            color: '#94a3b8',
+            border: 'none',
+        },
+        '.cm-activeLineGutter': {
+            backgroundColor: '#334155 !important',
+        },
+        '.cm-scroller': {
+            fontFamily: 'inherit',
+        },
+        '.cm-cursor': {
+            borderLeftColor: 'white',
+        },
+        '&.cm-focused .cm-cursor': {
+            borderLeftColor: 'white',
+        },
+        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+            backgroundColor: '#475569',
+        },
+        '.cm-searchMatch': {
+            backgroundColor: '#64748b',
+            outline: '1px solid #94a3b8',
+        },
+        '.cm-searchMatch.cm-searchMatch-selected': {
+            backgroundColor: '#94a3b8',
+        },
+    }),
+];
+
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange }) => {
     const editor = useRef<any>();
 
@@ -71,42 +108,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange }) => {
                 value={value}
                 height="100%"
                 className="flex-grow"
-                extensions={[
-                    markdown({ base: markdownLanguage, codeLanguages: languages }),
-                    EditorView.theme({
-                        '&': {
-                            backgroundColor: '#1e293b !important',
-                            color: 'white',
-                        },
-                        '.cm-gutters': {
-                            backgroundColor: '#1e293b !important',
-                            color: '#94a3b8',
-                            border: 'none',
-                        },
-                        '.cm-activeLineGutter': {
-                            backgroundColor: '#334155 !important',
-                        },
-                        '.cm-scroller': {
-                            fontFamily: 'inherit',
-                        },
-                        '.cm-cursor': {
-                            borderLeftColor: 'white',
-                        },
-                        '&.cm-focused .cm-cursor': {
-                            borderLeftColor: 'white',
-                        },
-                        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-                            backgroundColor: '#475569',
-                        },
-                        '.cm-searchMatch': {
-                            backgroundColor: '#64748b',
-                            outline: '1px solid #94a3b8',
-                        },
-                        '.cm-searchMatch.cm-searchMatch-selected': {
-                            backgroundColor: '#94a3b8',
-                        },
-                    }),
-                ]}
+                extensions={editorExtensions}
                 onChange={onEditorChange}
             />
         </div>
