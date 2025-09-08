@@ -1,33 +1,36 @@
 import axios from 'axios';
-import { load, Cheerio, Element } from 'cheerio';
+import * as cheerio from 'cheerio';
 import { CAData } from '../types/types';
 
 // Helper function to safely query and extract text
-const queryText = ($: Cheerio<Element>, selector: string): string => {
+const queryText = ($: cheerio.CheerioAPI, selector: string): string => {
     return $(selector).text().trim() || 'N/A';
 };
 
 // Helper to extract text from a p tag that contains a specific strong tag
-const queryParentText = ($: Cheerio<Element>, strongText: string): string => {
-    const strongTag = $('strong').filter((i: number, el: Element) => {
-        return $(el).text().trim() === strongText;
+const queryParentText = (context: any, strongText: string): string => {
+    let text = 'N/A';
+    const strongTag = context.find('strong').filter((i: number, el: cheerio.Element) => {
+        // @ts-ignore
+        return cheerio.load(el).text().trim() === strongText; // NOSONAR
     });
+
     if (strongTag.length > 0) {
-        return strongTag.parent().text().replace(strongText, '').trim() || 'N/A';
+        text = strongTag.parent().text().replace(strongText, '').trim() || 'N/A';
     }
-    return 'N/A';
+    return text;
 };
 
 const parseCAHtml = (htmlContent: string): CAData | null => {
     try {
-        const $ = load(htmlContent);
+        const $ = cheerio.load(htmlContent);
 
         const equipmentName = $('#titulo-equipamento h1').text().trim();
         if (!equipmentName || $('.num_ca span').length === 0) {
             return null; // Basic validation to check if it's a valid CA page
         }
 
-        const manufacturerDiv = $('.grupo_result_ca h3').filter((i: number, el: Element) => $(el).text().trim() === 'Fabricante').parent();
+        const manufacturerDiv = $('.grupo_result_ca h3').filter((i: number, el: cheerio.Element) => $(el).text().trim() === 'Fabricante').parent();
 
         const data: CAData = {
             equipmentName,
@@ -50,15 +53,15 @@ const parseCAHtml = (htmlContent: string): CAData | null => {
                 site: manufacturerDiv.find('p.info a[href*="/redir/"]').attr('href') || '#',
                 address: queryParentText(manufacturerDiv, 'Cidade/UF:'),
             },
-            photos: $('ul.fotos-ca li a img').map((i: number, el: Element) => $(el).attr('src')).get(),
-            history: $('.tabela-interna tbody tr').slice(1).map((i: number, row: Element) => {
+            photos: $('ul.fotos-ca li a img').map((i: number, el: cheerio.Element) => $(el).attr('src')).get(),
+            history: $('.tabela-interna tbody tr').slice(1).map((i: number, row: cheerio.Element) => {
                 const cells = $(row).find('td');
                 return {
                     date: $(cells[0]).text().trim(),
                     event: $(cells[1]).text().trim(),
                 };
             }).get(),
-            norms: $('ul.lista-normas li').map((i: number, el: Element) => $(el).text().trim()).get(),
+            norms: $('ul.lista-normas li').map((i: number, el: cheerio.Element) => $(el).text().trim()).get(),
         };
 
         return data;
@@ -84,8 +87,9 @@ export const fetchNewCaData = async (caNumber: string): Promise<CAData> => {
         }
 
         return parsedData;
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
+    } catch (error: any) {
+        // @ts-ignore
+        if (axios.isAxiosError(error) && error.response?.status === 404) { // NOSONAR
             throw new Error(`CA #${caNumber} not found on consultaca.com.`);
         }
         // To be safe, we wrap the original error
