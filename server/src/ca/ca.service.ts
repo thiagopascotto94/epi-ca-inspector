@@ -1,16 +1,16 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
+import { load, Cheerio, Element } from 'cheerio';
 import { CAData } from '../types/types';
 
 // Helper function to safely query and extract text
-const queryText = (scope: cheerio.Cheerio<cheerio.Element>, selector: string): string => {
-    return scope.find(selector).text().trim() || 'N/A';
+const queryText = ($: Cheerio<Element>, selector: string): string => {
+    return $(selector).text().trim() || 'N/A';
 };
 
 // Helper to extract text from a p tag that contains a specific strong tag
-const queryParentText = (scope: cheerio.Cheerio<cheerio.Element>, strongText: string): string => {
-    const strongTag = scope.find('strong').filter((i, el) => {
-        return cheerio.load(el).text().trim() === strongText;
+const queryParentText = ($: Cheerio<Element>, strongText: string): string => {
+    const strongTag = $('strong').filter((i: number, el: Element) => {
+        return $(el).text().trim() === strongText;
     });
     if (strongTag.length > 0) {
         return strongTag.parent().text().replace(strongText, '').trim() || 'N/A';
@@ -20,14 +20,14 @@ const queryParentText = (scope: cheerio.Cheerio<cheerio.Element>, strongText: st
 
 const parseCAHtml = (htmlContent: string): CAData | null => {
     try {
-        const $ = cheerio.load(htmlContent);
+        const $ = load(htmlContent);
 
         const equipmentName = $('#titulo-equipamento h1').text().trim();
         if (!equipmentName || $('.num_ca span').length === 0) {
             return null; // Basic validation to check if it's a valid CA page
         }
 
-        const manufacturerDiv = $('.grupo_result_ca h3').filter((i, el) => $(el).text().trim() === 'Fabricante').parent();
+        const manufacturerDiv = $('.grupo_result_ca h3').filter((i: number, el: Element) => $(el).text().trim() === 'Fabricante').parent();
 
         const data: CAData = {
             equipmentName,
@@ -50,15 +50,15 @@ const parseCAHtml = (htmlContent: string): CAData | null => {
                 site: manufacturerDiv.find('p.info a[href*="/redir/"]').attr('href') || '#',
                 address: queryParentText(manufacturerDiv, 'Cidade/UF:'),
             },
-            photos: $('ul.fotos-ca li a img').map((i, el) => $(el).attr('src')).get(),
-            history: $('.tabela-interna tbody tr').slice(1).map((i, row) => {
+            photos: $('ul.fotos-ca li a img').map((i: number, el: Element) => $(el).attr('src')).get(),
+            history: $('.tabela-interna tbody tr').slice(1).map((i: number, row: Element) => {
                 const cells = $(row).find('td');
                 return {
                     date: $(cells[0]).text().trim(),
                     event: $(cells[1]).text().trim(),
                 };
             }).get(),
-            norms: $('ul.lista-normas li').map((i, el) => $(el).text().trim()).get(),
+            norms: $('ul.lista-normas li').map((i: number, el: Element) => $(el).text().trim()).get(),
         };
 
         return data;
@@ -71,7 +71,7 @@ const parseCAHtml = (htmlContent: string): CAData | null => {
 export const fetchNewCaData = async (caNumber: string): Promise<CAData> => {
     const url = `https://consultaca.com/${caNumber}`;
     try {
-        const { data: htmlContent } = await axios.get(url, {
+        const { data: htmlContent } = await axios.get<string>(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
@@ -84,11 +84,13 @@ export const fetchNewCaData = async (caNumber: string): Promise<CAData> => {
         }
 
         return parsedData;
-    } catch (error: any) {
-        console.error(`Error fetching and parsing CA ${caNumber}:`, error.message);
+    } catch (error: unknown) {
         if (axios.isAxiosError(error) && error.response?.status === 404) {
             throw new Error(`CA #${caNumber} not found on consultaca.com.`);
         }
-        throw new Error(`Failed to process CA #${caNumber}: ${error.message}`);
+        // To be safe, we wrap the original error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`Error fetching and parsing CA ${caNumber}:`, errorMessage);
+        throw new Error(`Failed to process CA #${caNumber}: ${errorMessage}`);
     }
 };

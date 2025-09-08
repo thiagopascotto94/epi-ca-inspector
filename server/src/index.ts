@@ -1,14 +1,16 @@
+import { bootstrap, shutdown } from './boot';
+
+// Bootstrap the application (load environment variables)
+// This MUST be the first line of code to run.
+bootstrap();
+
 import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import sequelize from './config/database';
 import authRoutes from './auth/auth.routes';
 import libraryRoutes from './library/library.routes';
 // import jobRoutes from './job/job.routes'; // Jobs disabled
 import caRoutes from './ca/ca.routes';
-
-// Load environment variables from .env file
-dotenv.config();
 
 const app = express();
 
@@ -47,6 +49,7 @@ const startServer = async () => {
             console.log('Shutting down gracefully...');
             server.close(async () => {
                 await sequelize.close();
+                await shutdown();
                 process.exit(0);
             });
         };

@@ -1,49 +1,30 @@
-// import { RedisMemoryServer } from 'redis-memory-server';
+import dotenv from 'dotenv';
+import path from 'path';
 
-// let redisServer: RedisMemoryServer | null = null;
+/**
+ * This function should be called at the very beginning of the application's
+ * entry point. It handles loading environment variables from the correct file.
+ */
+export const bootstrap = (): void => {
+    const envPath = path.resolve(__dirname, '../../.env.local');
+    const result = dotenv.config({ path: envPath });
 
-// /**
-//  * Starts an in-memory Redis server if the environment is 'development'
-//  * and sets the REDIS_URL environment variable.
-//  * In production, it does nothing and expects REDIS_URL to be set in the environment.
-//  */
-// export const bootstrap = async (): Promise<void> => {
-//     if (process.env.NODE_ENV === 'development') {
-//         console.log('Development environment detected, starting in-memory Redis server...');
-//         try {
-//             redisServer = new RedisMemoryServer({
-//                 instance: {
-//                     port: 6379, // Use the default Redis port
-//                 },
-//             });
-//             await redisServer.start();
-//             const redisUri = redisServer.getUri();
-//             process.env.REDIS_URL = redisUri;
-//             console.log(`In-memory Redis server started at: ${redisUri}`);
-//         } catch (error) {
-//             console.error('Failed to start in-memory Redis server:', error);
-//             process.exit(1);
-//         }
-//     } else {
-//         console.log('Production or test environment detected, using REDIS_URL from environment.');
-//         if (!process.env.REDIS_URL) {
-//             console.error('FATAL: REDIS_URL environment variable is not set in production.');
-//             process.exit(1);
-//         }
-//     }
-// };
+    if (result.error) {
+        // This is not a fatal error in development if the file doesn't exist,
+        // but it's good to be aware of it.
+        console.warn(`Warning: Could not load .env.local file from ${envPath}.`);
+        console.warn('Ensure the file exists or all environment variables are set externally.');
+    } else {
+        console.log(`Environment variables loaded from ${envPath}`);
+    }
 
-// /**
-//  * Stops the in-memory Redis server if it was started.
-//  */
-// export const shutdown = async (): Promise<void> => {
-//     if (redisServer) {
-//         await redisServer.stop();
-//         console.log('In-memory Redis server stopped.');
-//         redisServer = null;
-//     }
-// };
+    // Redis logic is currently disabled.
+    // When re-enabling, the logic to start redis-memory-server would go here.
+};
 
-// For now, we will export empty functions to avoid breaking imports
-export const bootstrap = async (): Promise<void> => { /* Redis disabled */ };
-export const shutdown = async (): Promise<void> => { /* Redis disabled */ };
+/**
+ * Handles graceful shutdown logic. Currently empty as Redis is disabled.
+ */
+export const shutdown = async (): Promise<void> => {
+    // Logic to stop in-memory redis would go here.
+};

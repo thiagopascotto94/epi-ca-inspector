@@ -32,12 +32,12 @@ This directory contains the Node.js backend for the application, built with Expr
 
 ### 2. Environment Configuration
 
-1.  **Create a `.env` file** in the `server` directory by copying the example file:
+1.  **Create a `.env.local` file** in the `server` directory by copying the example file:
     ```bash
-    cp .env.example .env
+    cp .env.local.example .env.local
     ```
 
-2.  **Edit the `.env` file** and provide the necessary values for your environment:
+2.  **Edit the `.env.local` file** and provide the necessary values for your environment:
     - `NODE_ENV`: Set to `development` or `production`.
     - `PORT`: The port for the API server (e.g., 3001).
     - `DATABASE_URL`: The connection string for your PostgreSQL database.
@@ -66,7 +66,7 @@ npx sequelize-cli db:migrate
 This will run the API server using `nodemon`, which automatically restarts on file changes.
 
 ```bash
-# Set NODE_ENV to development in your .env file or your shell
+# Set NODE_ENV to development in your .env.local file or your shell
 export NODE_ENV=development
 
 # Start the API server
@@ -78,7 +78,7 @@ npm run dev
 This will build the application and start the API server using PM2.
 
 ```bash
-# Set NODE_ENV to production in your .env file or your shell
+# Set NODE_ENV to production in your .env.local file or your shell
 export NODE_ENV=production
 
 # Build and start the API server with PM2

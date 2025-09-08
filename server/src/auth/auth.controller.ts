@@ -1,11 +1,8 @@
 import { Request, Response } from 'express';
 import { User } from '../models';
 import jwt, { SignOptions } from 'jsonwebtoken';
-import dotenv from 'dotenv';
 import admin from '../config/firebase-admin';
 import crypto from 'crypto';
-
-dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key';
 const JWT_EXPIRES_IN_STRING = process.env.JWT_EXPIRES_IN || '1d';
