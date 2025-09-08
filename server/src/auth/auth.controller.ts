@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { User } from '../models';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import admin from '../config/firebase-admin';
 import crypto from 'crypto';
@@ -13,11 +13,11 @@ const ROOT_USER_EMAIL = process.env.ROOT_USER_EMAIL;
 
 // Helper to generate a local JWT
 const generateLocalToken = (user: User) => {
-    return jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-    );
+    const payload = { id: user.id, email: user.email, role: user.role };
+    const options: SignOptions = {
+        expiresIn: JWT_EXPIRES_IN,
+    };
+    return jwt.sign(payload, JWT_SECRET, options);
 };
 
 export const register = async (req: Request, res: Response) => {
