@@ -4,7 +4,6 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import admin from '../config/firebase-admin';
 import crypto from 'crypto';
-import ms from 'ms';
 
 dotenv.config();
 
@@ -12,12 +11,38 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key';
 const JWT_EXPIRES_IN_STRING = process.env.JWT_EXPIRES_IN || '1d';
 const ROOT_USER_EMAIL = process.env.ROOT_USER_EMAIL;
 
+/**
+ * Parses a time string like '1d', '10h', '7m' into seconds.
+ * @param timeString The string to parse.
+ * @returns The number of seconds.
+ */
+const parseTimeStringToSeconds = (timeString: string): number => {
+    const unit = timeString.charAt(timeString.length - 1).toLowerCase();
+    const value = parseInt(timeString.slice(0, -1), 10);
+
+    if (isNaN(value)) {
+        return 86400; // Default to 1 day in seconds if format is invalid
+    }
+
+    switch (unit) {
+        case 'd':
+            return value * 24 * 60 * 60;
+        case 'h':
+            return value * 60 * 60;
+        case 'm':
+            return value * 60;
+        case 's':
+            return value;
+        default:
+            return 86400; // Default to 1 day
+    }
+};
+
 // Helper to generate a local JWT
 const generateLocalToken = (user: User) => {
     const payload = { id: user.id, email: user.email, role: user.role };
 
-    // Convert the time string (e.g., '1d', '10h') to seconds for jwt.sign
-    const expiresInSeconds = Math.floor(ms(JWT_EXPIRES_IN_STRING) / 1000);
+    const expiresInSeconds = parseTimeStringToSeconds(JWT_EXPIRES_IN_STRING);
 
     const options: SignOptions = {
         expiresIn: expiresInSeconds,
