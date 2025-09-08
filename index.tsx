@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Router as AppRoutes } from './routes';
+import { AppRouter as AppRoutes } from './routes';
+import { AuthProvider } from './contexts/AuthContext';
 import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -24,7 +25,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <AppRoutes />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

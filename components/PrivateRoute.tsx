@@ -1,17 +1,16 @@
 import React from 'react';
-import { Navigate, useOutletContext } from 'react-router-dom';
-import { User } from 'firebase/auth';
-import { useIsRootUser } from '../hooks/useIsRootUser';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PrivateRouteProps {
     children: React.ReactElement;
 }
 
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
-    const { user } = useOutletContext<{ user: User | null }>();
-    const isRootUser = useIsRootUser(user);
+    const { isAuthenticated, user } = useAuth();
 
-    if (!isRootUser) {
+    if (!isAuthenticated() || user?.role !== 'ROOT') {
+        // Redirect them to the home page if they are not a logged-in ROOT user.
         return <Navigate to="/" replace />;
     }
 

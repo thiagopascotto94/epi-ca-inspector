@@ -8,16 +8,20 @@ export interface UserAttributes {
     email: string;
     password: string;
     role: 'USER' | 'ROOT';
+    passwordResetToken?: string;
+    passwordResetExpires?: Date;
 }
 
 // Interface for User creation attributes (password is required)
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'role'> {}
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'role' | 'passwordResetToken' | 'passwordResetExpires'> {}
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
     public id!: string;
     public email!: string;
     public password!: string;
     public role!: 'USER' | 'ROOT';
+    public passwordResetToken?: string;
+    public passwordResetExpires?: Date;
 
     // Timestamps
     public readonly createdAt!: Date;
@@ -51,6 +55,14 @@ User.init({
         type: DataTypes.ENUM('USER', 'ROOT'),
         allowNull: false,
         defaultValue: 'USER',
+    },
+    passwordResetToken: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    passwordResetExpires: {
+        type: DataTypes.DATE,
+        allowNull: true,
     }
 }, {
     tableName: 'users',

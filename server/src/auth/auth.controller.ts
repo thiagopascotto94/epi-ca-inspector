@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { User } from '../models';
 import jwt, { SignOptions } from 'jsonwebtoken';
+import { Op } from 'sequelize';
 import admin from '../config/firebase-admin';
 import crypto from 'crypto';
 
@@ -145,5 +146,66 @@ export const socialLogin = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid or expired Firebase token.' });
         }
         res.status(500).json({ message: 'Internal server error during social login' });
+    }
+};
+
+export const requestPasswordReset = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ where: { email } });
+
+        if (!user) {
+            // Don't reveal that the user doesn't exist.
+            return res.status(200).json({ message: 'If a user with that email exists, a password reset link has been sent.' });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        user.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        user.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+        await user.save();
+
+        // In a real app, you would send an email. For now, we'll log it.
+        console.log(`Password reset requested for ${email}. Token: ${resetToken}`);
+        console.log(`Reset link: http://localhost:5173/reset-password?token=${resetToken}`);
+
+        res.status(200).json({ message: 'If a user with that email exists, a password reset link has been sent.' });
+
+    } catch (error) {
+        console.error('Request password reset error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password) {
+            return res.status(400).json({ message: 'Token and new password are required' });
+        }
+
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        const user = await User.findOne({
+            where: {
+                passwordResetToken: hashedToken,
+                passwordResetExpires: { [Op.gt]: new Date() }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Password reset token is invalid or has expired.' });
+        }
+
+        user.password = password; // The hook will hash it
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Password has been reset successfully.' });
+
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ message: 'Internal server error' });
     }
 };

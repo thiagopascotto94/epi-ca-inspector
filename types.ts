@@ -83,3 +83,19 @@ export interface ClientStats {
   documents: number;
   searches: number;
 }
+
+export interface LoginCredentials {
+  email: string;
+  password?: string; // Password is not always required, e.g. for social login
+}
+
+export interface User {
+  id: string;
+  email: string;
+  role: 'USER' | 'ROOT';
+}
+
+export interface AuthResponse {
+  token: string;
+  user?: User; // The user object might be part of the response
+}
