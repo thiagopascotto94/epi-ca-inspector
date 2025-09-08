@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AuthService } from "../authService";
+import { useAuth } from "../contexts/AuthContext";
 import { useDialog } from "../hooks/useDialog";
 import { PromptDialog } from "../components/PromptDialog";
 
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, loginWithGoogle } = useAuth();
   const { dialogState, prompt } = useDialog();
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.login({ email, password });
+      await login({ email, password });
       navigate("/dashboard");
     } catch (error: any) {
       setError("Falha no login. Verifique seu e-mail e senha.");
@@ -42,7 +44,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.loginWithGoogle();
+      await loginWithGoogle();
       navigate("/dashboard");
     } catch (error: any) {
       setError("Falha no login com o Google.");
