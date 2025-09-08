@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../auth/auth.middleware';
 import { Job } from '../models';
-import { aiQueue } from '../config/redis';
+// import { aiQueue } from '../config/redis';
 
 export const createJob = async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -19,15 +19,15 @@ export const createJob = async (req: AuthenticatedRequest, res: Response) => {
             type,
             inputData,
             userId,
-            status: 'pending',
+            status: 'pending', // Status will remain pending since worker is disabled
         });
 
         // Add the job to the queue
         // The job name in BullMQ corresponds to our 'type'
         // The job id in BullMQ will be the same as our database job id
-        await aiQueue.add(type, inputData, { jobId: newDbJob.id });
+        // await aiQueue.add(type, inputData, { jobId: newDbJob.id });
 
-        res.status(202).json({ message: 'Job accepted', jobId: newDbJob.id });
+        res.status(202).json({ message: 'Job accepted (queue is disabled)', jobId: newDbJob.id });
 
     } catch (error) {
         console.error('Failed to create job:', error);

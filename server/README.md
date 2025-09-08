@@ -1,16 +1,14 @@
 # Backend Server
 
-This directory contains the Node.js backend for the application, built with Express, TypeScript, Sequelize, and BullMQ.
+This directory contains the Node.js backend for the application, built with Express, TypeScript, and Sequelize.
 
 ## Features
 
-- **REST API**: For managing users, libraries, and background jobs.
+- **REST API**: For managing users, libraries, and CAs.
 - **Authentication**: JWT-based authentication with root user privileges, supporting both email/password and social login via Firebase.
 - **Database**: Uses PostgreSQL with Sequelize for object-relational mapping.
-- **Background Jobs**: Long-running AI tasks are processed in the background using BullMQ and Redis.
-- **Process Management**: Uses PM2 to manage the API server and the AI worker as separate processes.
+- **Process Management**: Uses PM2 to manage the API server.
 - **CA Caching**: Fetches and caches CA (Certificado de Aprovação) data with a 7-day refresh policy.
-- **In-Memory Dev Server**: Automatically starts an in-memory Redis server for development, simplifying setup.
 
 ## Getting Started
 
@@ -19,7 +17,6 @@ This directory contains the Node.js backend for the application, built with Expr
 - Node.js (v18 or later)
 - npm
 - PostgreSQL
-- **For Production Only:** A running Redis instance.
 
 ### 1. Installation
 
@@ -45,8 +42,6 @@ This directory contains the Node.js backend for the application, built with Expr
     - `PORT`: The port for the API server (e.g., 3001).
     - `DATABASE_URL`: The connection string for your PostgreSQL database.
       - *Example: `postgres://user:password@localhost:5432/mydatabase`*
-    - `REDIS_URL`: **(Production Only)** The connection string for your Redis instance. In development, this is set automatically.
-      - *Example: `redis://localhost:6379`*
     - `JWT_SECRET`: A long, random, and secret string for signing JWTs.
     - `GEMINI_API_KEY`: Your API key for the Google Gemini service.
     - `ROOT_USER_EMAIL`: The email address of the user who should have ROOT privileges.
@@ -68,35 +63,32 @@ npx sequelize-cli db:migrate
 
 #### For Development
 
-When running in development mode, an in-memory Redis server will be started for you automatically. Simply run the `dev` scripts.
+This will run the API server using `nodemon`, which automatically restarts on file changes.
 
 ```bash
 # Set NODE_ENV to development in your .env file or your shell
 export NODE_ENV=development
 
-# Terminal 1: Start the API server
+# Start the API server
 npm run dev
-
-# Terminal 2: Start the AI worker
-npm run dev:worker
 ```
 
 #### For Production
 
-For production, you must have a real Redis instance running and have the `REDIS_URL` configured in your `.env` file.
+This will build the application and start the API server using PM2.
 
 ```bash
 # Set NODE_ENV to production in your .env file or your shell
 export NODE_ENV=production
 
-# Build and start both processes with PM2
+# Build and start the API server with PM2
 npm run pm2:start
 ```
 
 ### PM2 Commands
 
-- **Stop all processes**: `npm run pm2:stop`
-- **Restart all processes**: `npm run pm2:restart`
+- **Stop the server**: `npm run pm2:stop`
+- **Restart the server**: `npm run pm2:restart`
 - **View logs**: `npm run pm2:logs`
 - **Delete from PM2 registry**: `npm run pm2:delete`
 
@@ -108,5 +100,4 @@ All API routes are prefixed with `/api`.
 -   `/api/auth/login`: Log in with email and password.
 -   `/api/auth/social-login`: Log in or register via a Firebase ID token.
 -   `/api/libraries`: CRUD operations for user libraries and files. Includes routes for managing templates (ROOT only).
--   `/api/jobs`: Creating and checking the status of background AI jobs.
 -   `/api/cas/:caNumber`: Fetches data for a specific CA, using a 7-day cache.
