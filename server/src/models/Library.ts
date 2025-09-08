@@ -1,6 +1,7 @@
-import { Model, DataTypes, Optional, HasManyGetAssociationsMixin } from 'sequelize';
+import { Model, DataTypes, Optional, HasManyGetAssociationsMixin, BelongsToGetAssociationMixin } from 'sequelize';
 import sequelize from '../config/database';
 import LibraryFile, { LibraryFileAttributes } from './LibraryFile';
+import User from './User';
 
 // Interface for Library attributes
 export interface LibraryAttributes {
@@ -30,9 +31,11 @@ class Library extends Model<LibraryAttributes, LibraryCreationAttributes> implem
 
     // Associated models
     public readonly files?: LibraryFile[];
+    public readonly user?: User;
 
     // Association mixins
     public getFiles!: HasManyGetAssociationsMixin<LibraryFile>;
+    public getUser!: BelongsToGetAssociationMixin<User>;
 }
 
 Library.init({

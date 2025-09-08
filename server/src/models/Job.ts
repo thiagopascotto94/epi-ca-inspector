@@ -1,5 +1,6 @@
-import { Model, DataTypes, Optional } from 'sequelize';
+import { Model, DataTypes, Optional, BelongsToGetAssociationMixin } from 'sequelize';
 import sequelize from '../config/database';
+import User from './User';
 
 // Based on SimilarityJob from types.ts, but more generic
 export interface JobAttributes {
@@ -32,6 +33,12 @@ class Job extends Model<JobAttributes, JobCreationAttributes> implements JobAttr
     // Timestamps
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
+
+    // Associated models
+    public readonly user?: User;
+
+    // Association mixins
+    public getUser!: BelongsToGetAssociationMixin<User>;
 }
 
 Job.init({
