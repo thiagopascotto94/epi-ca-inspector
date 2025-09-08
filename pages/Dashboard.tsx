@@ -13,14 +13,11 @@ import { HistoryService } from '../services/historyService';
 import { AIService } from '../services/aiService';
 import { JobService } from '../services/jobService';
 import { LibraryService } from '../services/libraryService';
-import { useOutletContext } from 'react-router-dom';
-import { User } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
-import { useIsRootUser } from '../hooks/useIsRootUser';
 
 export default function Dashboard() {
-    const { user } = useOutletContext<{ user: User | null }>();
-    const uid = user?.uid;
+    const { user } = useAuth();
 
     // Search and CA data state
     const [caNumberInput, setCaNumberInput] = useState('');
@@ -73,10 +70,10 @@ export default function Dashboard() {
 
     useEffect(() => {
         const loadInitialData = async () => {
-            if (uid) {
-                setSearchHistory(await HistoryService.getSearchHistory(uid));
-                setJobs(await JobService.getAllJobs(uid));
-                setLibraries(await LibraryService.getLibraries(uid));
+            if (user) {
+                setSearchHistory(await HistoryService.getSearchHistory());
+                setJobs(await JobService.getAllJobs());
+                setLibraries(await LibraryService.getLibraries());
 
                 const hasSeenOnboarding = localStorage.getItem('hasSeenDashboardOnboarding');
                 if (!hasSeenOnboarding) {
@@ -85,7 +82,7 @@ export default function Dashboard() {
             }
         };
         loadInitialData();
-    }, [uid]);
+    }, [user]);
 
     const handleJoyrideCallback = (data: any) => {
         const { status } = data;
@@ -103,7 +100,7 @@ export default function Dashboard() {
             const messageHandler = async (event: MessageEvent) => {
                 if (event.data && event.data.type === 'JOB_UPDATED') {
                     const { jobId } = event.data.payload;
-                    const updatedJobs = await JobService.getAllJobs(uid);
+                    const updatedJobs = await JobService.getAllJobs();
                     const updatedJob = updatedJobs.find(j => j.id === jobId);
 
                     if (updatedJob) {
@@ -167,8 +164,8 @@ export default function Dashboard() {
             const data = await CAScraperService.fetchAndParse(caNumber, (message) => setLoadingMessage(message));
             if (target === 'primary') {
                 setCaData(data);
-                await HistoryService.addSearchHistory(uid, caNumber);
-                setSearchHistory(await HistoryService.getSearchHistory(uid));
+                await HistoryService.addSearchHistory(caNumber);
+                setSearchHistory(await HistoryService.getSearchHistory());
             } else {
                 setComparisonData(data);
             }
@@ -210,12 +207,12 @@ export default function Dashboard() {
     };
 
     const handleFindSimilar = async () => {
-        if (!caData) return;
+        if (!caData || !user) return;
         
         try {
             const jobData = await AIService.findSimilar(caData, findSimilarLibraryId, findSimilarDescription, libraries);
-            const newJob = await JobService.createJob(uid, jobData);
-            setJobs(await JobService.getAllJobs(uid));
+            const newJob = await JobService.createJob(jobData);
+            setJobs(await JobService.getAllJobs());
             setShowFindSimilarUI(false);
 
             // Notify service worker to start processing the job
@@ -227,7 +224,7 @@ export default function Dashboard() {
                         payload: {
                             jobId: newJob.id,
                             apiKey: process.env.VITE_FIREBASE_API_KEY, // Use VITE_ prefix for Vite env vars
-                            uid: uid,
+                            uid: user.id,
                             geminiApiKey: process.env.VITE_GEMINI_API_KEY // New: Pass Gemini API Key
                         }
                     });
@@ -261,8 +258,8 @@ export default function Dashboard() {
     };
     
     const handleDeleteJob = async (jobId: string) => {
-        await JobService.deleteJob(uid, jobId);
-        setJobs(await JobService.getAllJobs(uid));
+        await JobService.deleteJob(jobId);
+        setJobs(await JobService.getAllJobs());
     };
 
     return (
@@ -302,7 +299,7 @@ export default function Dashboard() {
                 isConverting={isConverting}
             />
 
-            <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(uid); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />
+            <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />
 
             <div className={`grid grid-cols-1 gap-8 ${caData && !comparisonData ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
                 {caData && <div><CADetailCard data={caData} /></div>}
