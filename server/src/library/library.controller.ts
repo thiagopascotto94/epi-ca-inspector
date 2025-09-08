@@ -98,7 +98,7 @@ export const importLibraryTemplate = async (req: AuthenticatedRequest, res: Resp
             name: template.name,
             userId: userId,
             systemModelId: template.id,
-            files: template.files?.map(file => ({
+            files: template.files?.map((file: LibraryFile) => ({
                 name: file.name,
                 url: file.url,
                 content: file.content

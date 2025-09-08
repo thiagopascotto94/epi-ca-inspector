@@ -1,6 +1,6 @@
-import { Model, DataTypes, Optional } from 'sequelize';
+import { Model, DataTypes, Optional, HasManyGetAssociationsMixin } from 'sequelize';
 import sequelize from '../config/database';
-import { LibraryFileAttributes } from './LibraryFile'; // Will be created next
+import LibraryFile, { LibraryFileAttributes } from './LibraryFile';
 
 // Interface for Library attributes
 export interface LibraryAttributes {
@@ -27,6 +27,12 @@ class Library extends Model<LibraryAttributes, LibraryCreationAttributes> implem
     // Timestamps
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
+
+    // Associated models
+    public readonly files?: LibraryFile[];
+
+    // Association mixins
+    public getFiles!: HasManyGetAssociationsMixin<LibraryFile>;
 }
 
 Library.init({
