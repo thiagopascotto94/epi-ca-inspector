@@ -14,11 +14,13 @@ export class HistoryService {
         }
         try {
             console.log(`HistoryService: Attempting to get search history for UID: ${uid}`);
-            const q = query(this.getHistoryCollectionRef(uid), orderBy('timestamp', 'desc'), limit(10));
+            const q = query(this.getHistoryCollectionRef(uid), orderBy('timestamp', 'desc'));
             const querySnapshot = await getDocs(q);
             const history = querySnapshot.docs.map(doc => doc.data().caNumber as string);
-            console.log("HistoryService: Retrieved history:", history);
-            return history;
+            const uniqueHistory = [...new Set(history)];
+            const limitedHistory = uniqueHistory.slice(0, 10);
+            console.log("HistoryService: Retrieved history:", limitedHistory);
+            return limitedHistory;
         } catch (e) {
             console.error("HistoryService: Failed to load search history from Firestore", e);
             return [];
@@ -31,29 +33,16 @@ export class HistoryService {
             return;
         }
         try {
-            console.log(`HistoryService: Attempting to add/update search history for UID: ${uid}, CA: ${caNumber}`);
+            console.log(`HistoryService: Attempting to add search history for UID: ${uid}, CA: ${caNumber}`);
 
-            const q = query(this.getHistoryCollectionRef(uid), where("caNumber", "==", caNumber));
-            const querySnapshot = await getDocs(q);
+            await addDoc(this.getHistoryCollectionRef(uid), {
+                caNumber,
+                timestamp: serverTimestamp()
+            });
 
-            if (!querySnapshot.empty) {
-                // If CA number exists, update its timestamp
-                querySnapshot.docs.forEach(async (doc) => {
-                    await updateDoc(doc.ref, {
-                        timestamp: serverTimestamp()
-                    });
-                });
-                console.log(`HistoryService: Updated timestamp for existing CA: ${caNumber}`);
-            } else {
-                // If CA number does not exist, add a new document
-                await addDoc(this.getHistoryCollectionRef(uid), {
-                    caNumber,
-                    timestamp: serverTimestamp()
-                });
-                console.log(`HistoryService: Added new search history entry for CA: ${caNumber}`);
-            }
+            console.log(`HistoryService: Added new search history entry for CA: ${caNumber}`);
         } catch (e) {
-             console.error("HistoryService: Failed to save/update search history to Firestore", e);
+             console.error("HistoryService: Failed to save search history to Firestore", e);
         }
     }
 

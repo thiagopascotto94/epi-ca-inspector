@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cog6ToothIcon, DocumentTextIcon, ClipboardDocumentIcon, HomeIcon } from './Icon';
+import { Cog6ToothIcon, DocumentTextIcon, ClipboardDocumentIcon, HomeIcon, UsersIcon } from './Icon';
 import { IS_DEV_MODE } from '../config';
 import { AuthService } from '../authService';
 import { User } from 'firebase/auth';
+import { useIsRootUser } from '../hooks/useIsRootUser';
 
 interface HeaderProps {
     user: User | null;
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ user }) => {
     const navigate = useNavigate();
+    const isRootUser = useIsRootUser(user);
 
     const handleLogout = async () => {
         await AuthService.logout();
@@ -33,6 +35,11 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
                             <button id="library-link" onClick={() => navigate('/library')} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Biblioteca">
                                 <ClipboardDocumentIcon className="w-6 h-6"/>
                             </button>
+                            {isRootUser && (
+                                <button onClick={() => navigate('/client-stats')} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors" aria-label="Client Stats">
+                                    <UsersIcon className="w-6 h-6"/>
+                                </button>
+                            )}
                             <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors">Logout</button>
                         </>
                     ) : (
