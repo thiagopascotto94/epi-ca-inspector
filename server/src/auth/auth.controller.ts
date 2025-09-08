@@ -14,8 +14,11 @@ const ROOT_USER_EMAIL = process.env.ROOT_USER_EMAIL;
 // Helper to generate a local JWT
 const generateLocalToken = (user: User) => {
     const payload = { id: user.id, email: user.email, role: user.role };
+    // Explicitly defining the options, including the algorithm, helps TypeScript
+    // resolve the correct overload for jwt.sign and avoids type errors.
     const options: SignOptions = {
         expiresIn: JWT_EXPIRES_IN,
+        algorithm: 'HS256',
     };
     return jwt.sign(payload, JWT_SECRET, options);
 };
