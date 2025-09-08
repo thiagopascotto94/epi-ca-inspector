@@ -132,7 +132,7 @@ export default function Dashboard() {
                 navigator.serviceWorker.removeEventListener('message', messageHandler);
             };
         }
-    }, [uid]); // Depend on uid to re-register listener if uid changes
+    }, [user]); // Depend on user to re-register listener if user changes
 
     // New useEffect for beforeunload confirmation
     useEffect(() => {
