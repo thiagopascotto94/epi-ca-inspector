@@ -10,6 +10,7 @@ This directory contains the Node.js backend for the application, built with Expr
 - **Background Jobs**: Long-running AI tasks are processed in the background using BullMQ and Redis.
 - **Process Management**: Uses PM2 to manage the API server and the AI worker as separate processes.
 - **CA Caching**: Fetches and caches CA (Certificado de Aprovação) data with a 7-day refresh policy.
+- **In-Memory Dev Server**: Automatically starts an in-memory Redis server for development, simplifying setup.
 
 ## Getting Started
 
@@ -18,8 +19,7 @@ This directory contains the Node.js backend for the application, built with Expr
 - Node.js (v18 or later)
 - npm
 - PostgreSQL
-- Redis
-- A running instance of the frontend application.
+- **For Production Only:** A running Redis instance.
 
 ### 1. Installation
 
@@ -41,15 +41,16 @@ This directory contains the Node.js backend for the application, built with Expr
     ```
 
 2.  **Edit the `.env` file** and provide the necessary values for your environment:
+    - `NODE_ENV`: Set to `development` or `production`.
     - `PORT`: The port for the API server (e.g., 3001).
     - `DATABASE_URL`: The connection string for your PostgreSQL database.
       - *Example: `postgres://user:password@localhost:5432/mydatabase`*
-    - `REDIS_URL`: The connection string for your Redis instance.
+    - `REDIS_URL`: **(Production Only)** The connection string for your Redis instance. In development, this is set automatically.
       - *Example: `redis://localhost:6379`*
     - `JWT_SECRET`: A long, random, and secret string for signing JWTs.
     - `GEMINI_API_KEY`: Your API key for the Google Gemini service.
     - `ROOT_USER_EMAIL`: The email address of the user who should have ROOT privileges.
-    - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`: Credentials from your Firebase project's service account JSON file. The private key often has `\n` characters; ensure they are preserved correctly in the .env file.
+    - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`: Credentials from your Firebase project's service account JSON file.
 
 ### 3. Database Migration
 
@@ -67,9 +68,12 @@ npx sequelize-cli db:migrate
 
 #### For Development
 
-This will run the API server and the AI worker using `nodemon`, which automatically restarts on file changes.
+When running in development mode, an in-memory Redis server will be started for you automatically. Simply run the `dev` scripts.
 
 ```bash
+# Set NODE_ENV to development in your .env file or your shell
+export NODE_ENV=development
+
 # Terminal 1: Start the API server
 npm run dev
 
@@ -79,9 +83,13 @@ npm run dev:worker
 
 #### For Production
 
-This will build the application and start both the API server and the AI worker using PM2, as defined in `ecosystem.config.js`.
+For production, you must have a real Redis instance running and have the `REDIS_URL` configured in your `.env` file.
 
 ```bash
+# Set NODE_ENV to production in your .env file or your shell
+export NODE_ENV=production
+
+# Build and start both processes with PM2
 npm run pm2:start
 ```
 
