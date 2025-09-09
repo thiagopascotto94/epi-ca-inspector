@@ -245,7 +245,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
             `)}            ---
 
             **Instruções Finais:**
-            1.  Com base nos resultados individuais, identifique até **5 EPIs mais similares** ao de referência.
+            1.  Com base nos resultados individuais, identifique até **10 EPIs mais similares** ao de referência. A prioridade é encontrar produtos com **100% de familiaridade** ou o mais próximo possível disso.
             2.  **Dê prioridade máxima à "Descrição Adicional" do usuário ao classificar a similaridade.**
             3.  Ordene-os do mais similar para o menos similar na sua resposta final.
             4.  Para cada sugestão, preencha todos os campos do schema JSON solicitado:
@@ -291,10 +291,11 @@ async function runSimilarityJob(jobId: string, uid: string) {
         
         const finalResponse = await generateContentWithRetry(ai, {
             model: 'gemini-2.0-flash-lite',
-            contents: synthesisPrompt,
-            config: {
+            contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
+            generationConfig: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
+                temperature: 0,
             }
         }, 3, (attempt) => {
             updateDoc(jobDocRef, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
