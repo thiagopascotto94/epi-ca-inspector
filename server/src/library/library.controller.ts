@@ -66,6 +66,114 @@ export const getLibraryTemplates = async (req: AuthenticatedRequest, res: Respon
     }
 };
 
+export const getLibraryTemplateById = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId } = req.params;
+        const template = await Library.findOne({
+            where: { id: templateId, isSystemModel: true },
+            include: ['files']
+        });
+        if (!template) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+        res.status(200).json(template);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to get library template', error });
+    }
+};
+
+export const updateLibraryTemplate = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId } = req.params;
+        const { name } = req.body;
+        const [updatedCount, updatedTemplates] = await Library.update(
+            { name },
+            { where: { id: templateId, isSystemModel: true }, returning: true }
+        );
+        if (updatedCount === 0) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+        res.status(200).json(updatedTemplates[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update library template', error });
+    }
+};
+
+export const deleteLibraryTemplate = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId } = req.params;
+        const result = await Library.destroy({ where: { id: templateId, isSystemModel: true } });
+        if (result === 0) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete library template', error });
+    }
+};
+
+export const addFileToTemplate = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId } = req.params;
+        // Assuming file is uploaded via multer or similar and available in req.file
+        // For now, let's assume file data is in body for simplicity
+        const { name, url, content } = req.body;
+
+        const template = await Library.findOne({ where: { id: templateId, isSystemModel: true } });
+        if (!template) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+
+        const newFile = await LibraryFile.create({ name, url, content, libraryId: templateId });
+        res.status(201).json(newFile);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to add file to template', error });
+    }
+};
+
+export const updateFileInTemplate = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId, fileId } = req.params;
+        const { name, url, content } = req.body;
+
+        const template = await Library.findOne({ where: { id: templateId, isSystemModel: true } });
+        if (!template) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+
+        const [updatedCount, updatedFiles] = await LibraryFile.update(
+            { name, url, content },
+            { where: { id: fileId, libraryId: templateId }, returning: true }
+        );
+
+        if (updatedCount === 0) {
+            return res.status(404).json({ message: 'File not found in template' });
+        }
+        res.status(200).json(updatedFiles[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update file in template', error });
+    }
+};
+
+export const deleteFileFromTemplate = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { templateId, fileId } = req.params;
+
+        const template = await Library.findOne({ where: { id: templateId, isSystemModel: true } });
+        if (!template) {
+            return res.status(404).json({ message: 'Template not found' });
+        }
+
+        const result = await LibraryFile.destroy({ where: { id: fileId, libraryId: templateId } });
+        if (result === 0) {
+            return res.status(404).json({ message: 'File not found in template' });
+        }
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete file from template', error });
+    }
+};
+
 export const createLibraryTemplate = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const rootUser = await User.findOne({where: {email: process.env.ROOT_USER_EMAIL}});
