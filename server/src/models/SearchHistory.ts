@@ -42,8 +42,4 @@ SearchHistory.init({
     sequelize,
 });
 
-// Associations
-SearchHistory.belongsTo(User, { foreignKey: 'userId' });
-User.hasMany(SearchHistory, { foreignKey: 'userId' });
-
 export default SearchHistory;

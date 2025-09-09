@@ -216,7 +216,7 @@ export default function Dashboard() {
             setShowFindSimilarUI(false);
 
             // Notify service worker to start processing the job
-            if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator && user) {
                 const registration = await navigator.serviceWorker.ready; // Wait for the service worker to be ready
                 if (registration.active) { // Ensure there's an active worker
                     registration.active.postMessage({ // Use registration.active to post message

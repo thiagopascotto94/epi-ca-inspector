@@ -1,6 +1,6 @@
 import { auth } from '../firebase'; // To get the Firebase token for the initial login
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 const TOKEN_KEY = 'authToken';
 
 // Function to get the stored JWT

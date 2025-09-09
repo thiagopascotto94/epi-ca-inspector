@@ -12,7 +12,7 @@ export const getSearchHistory = async (req: AuthenticatedRequest, res: Response)
             limit: 20, // Get last 20, we'll get unique on the client
         });
         // The client expects an array of strings
-        const caNumbers = history.map(h => h.caNumber);
+        const caNumbers = history.map((h: SearchHistory) => h.caNumber);
         const uniqueCaNumbers = [...new Set(caNumbers)].slice(0, 10);
         res.status(200).json(uniqueCaNumbers);
     } catch (error) {

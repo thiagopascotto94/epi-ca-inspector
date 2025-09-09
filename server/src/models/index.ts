@@ -3,6 +3,7 @@ import Library from './Library';
 import LibraryFile from './LibraryFile';
 import Job from './Job';
 import CA from './Ca';
+import SearchHistory from './SearchHistory';
 import sequelize from '../config/database';
 
 // User -> Library Association (One-to-Many)
@@ -36,5 +37,15 @@ LibraryFile.belongsTo(Library, {
     as: 'library'
 });
 
+// User -> SearchHistory Association (One-to-Many)
+User.hasMany(SearchHistory, {
+    foreignKey: 'userId',
+    as: 'searchHistories'
+});
+SearchHistory.belongsTo(User, {
+    foreignKey: 'userId',
+    as: 'user'
+});
 
-export { User, Library, LibraryFile, Job, CA, sequelize };
+
+export { User, Library, LibraryFile, Job, CA, SearchHistory, sequelize };
