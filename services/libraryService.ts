@@ -45,23 +45,23 @@ export class LibraryService {
 
     // Library Templates (for ROOT users)
     static async getLibraryTemplates(): Promise<Library[]> {
-        return api.get<Library[]>('/library-templates');
+        return api.get<Library[]>('/libraries/library-templates');
     }
 
     static async getLibraryTemplate(templateId: string): Promise<Library | null> {
-        return api.get<Library | null>(`/library-templates/${templateId}`);
+        return api.get<Library | null>(`/libraries/library-templates/${templateId}`);
     }
 
     static async createLibraryTemplate(libraryData: Partial<Library>): Promise<Library> {
-        return api.post<Library>('/library-templates', libraryData);
+        return api.post<Library>('/libraries/library-templates', libraryData);
     }
 
     static async saveLibraryTemplate(templateId: string, libraryData: Partial<Library>): Promise<Library> {
-        return api.put<Library>(`/library-templates/${templateId}`, libraryData);
+        return api.put<Library>(`/libraries/library-templates/${templateId}`, libraryData);
     }
 
     static async deleteLibraryTemplate(templateId: string): Promise<void> {
-        return api.delete<void>(`/library-templates/${templateId}`);
+        return api.delete<void>(`/libraries/library-templates/${templateId}`);
     }
 
     static async addFileToTemplate(templateId: string, file: File, metadata: { id: string; name: string }): Promise<LibraryFile> {
@@ -69,15 +69,15 @@ export class LibraryService {
         formData.append('file', file);
         formData.append('id', metadata.id);
         formData.append('name', metadata.name);
-        return api.post<LibraryFile>(`/library-templates/${templateId}/files`, formData);
+        return api.post<LibraryFile>(`/libraries/library-templates/${templateId}/files`, formData);
     }
 
     static async updateFileInTemplate(templateId: string, fileId: string, fileData: Partial<LibraryFile>): Promise<LibraryFile> {
-        return api.put<LibraryFile>(`/library-templates/${templateId}/files/${fileId}`, fileData);
+        return api.put<LibraryFile>(`/libraries/library-templates/${templateId}/files/${fileId}`, fileData);
     }
 
     static async deleteFileFromTemplate(templateId: string, fileId: string): Promise<void> {
-        return api.delete<void>(`/library-templates/${templateId}/files/${fileId}`);
+        return api.delete<void>(`/libraries/library-templates/${templateId}/files/${fileId}`);
     }
 
     // User actions with templates
