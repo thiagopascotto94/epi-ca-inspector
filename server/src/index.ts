@@ -9,7 +9,8 @@ import cors from 'cors';
 import sequelize from './config/database';
 import authRoutes from './auth/auth.routes';
 import libraryRoutes from './library/library.routes';
-// import jobRoutes from './job/job.routes'; // Jobs disabled
+import jobRoutes from './job/job.routes';
+import historyRoutes from './history/history.routes';
 import caRoutes from './ca/ca.routes';
 
 const app = express();
@@ -24,7 +25,8 @@ app.use(express.urlencoded({ limit: '5mb', extended: true }));
 const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/libraries', libraryRoutes);
-// apiRouter.use('/jobs', jobRoutes); // Jobs disabled
+apiRouter.use('/jobs', jobRoutes);
+apiRouter.use('/history', historyRoutes);
 apiRouter.use('/cas', caRoutes);
 app.use('/api', apiRouter);
 

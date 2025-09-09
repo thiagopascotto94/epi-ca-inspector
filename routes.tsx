@@ -12,6 +12,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ClientStatsPage = lazy(() => import("./pages/ClientStatsPage"));
 const LibraryDetailPage = lazy(() => import("./pages/LibraryDetailPage"));
 const EditFilePage = lazy(() => import("./pages/EditFilePage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 
 const router = createBrowserRouter([
     {
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
             },
             { path: "login", element: <LoginPage /> },
             { path: "register", element: <RegisterPage /> },
+            { path: "reset-password", element: <ResetPasswordPage /> },
             {
                 path: "library",
                 element: <AuthenticatedRoute><LibraryPage /></AuthenticatedRoute>,

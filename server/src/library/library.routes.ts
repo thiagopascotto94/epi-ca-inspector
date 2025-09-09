@@ -19,16 +19,16 @@ router.delete('/library-templates/:templateId/files/:fileId', isAuthenticated, i
 
 
 // --- User Library Routes (Protected for authenticated users) ---
-router.post('/libraries/import-template', isAuthenticated, controller.importLibraryTemplate); // Note the new path
-router.get('/libraries', isAuthenticated, controller.getLibraries);
-router.post('/libraries', isAuthenticated, controller.createLibrary);
+router.post('/libraries/import-template', isAuthenticated, controller.importLibraryTemplate);
+router.get('/', isAuthenticated, controller.getLibraries);
+router.post('/', isAuthenticated, controller.createLibrary);
 
-router.get('/libraries/:libraryId', isAuthenticated, controller.getLibraryById);
-router.delete('/libraries/:libraryId', isAuthenticated, controller.deleteLibrary);
+router.get('/:libraryId', isAuthenticated, controller.getLibraryById);
+router.delete('/:libraryId', isAuthenticated, controller.deleteLibrary);
 
 // --- File Routes (Nested under libraries) ---
-router.post('/libraries/:libraryId/files', isAuthenticated, controller.addFileToLibrary);
-router.put('/libraries/:libraryId/files/:fileId', isAuthenticated, controller.updateFileInLibrary);
-router.delete('/libraries/:libraryId/files/:fileId', isAuthenticated, controller.deleteFileFromLibrary);
+router.post('/:libraryId/files', isAuthenticated, controller.addFileToLibrary);
+router.put('/:libraryId/files/:fileId', isAuthenticated, controller.updateFileInLibrary);
+router.delete('/:libraryId/files/:fileId', isAuthenticated, controller.deleteFileFromLibrary);
 
 export default router;
