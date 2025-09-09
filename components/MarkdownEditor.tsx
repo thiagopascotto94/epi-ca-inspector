@@ -113,6 +113,6 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = React.memo(({ value, onCha
             />
         </div>
     );
-};
+});
 
 export default MarkdownEditor;
