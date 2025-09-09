@@ -154,8 +154,12 @@ const LibraryPage: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
                     {isRootUser ? 'Modelos de Biblioteca' : 'Minhas Bibliotecas'}
                 </h2>
+                {isLoading && <p className="text-center text-slate-500 dark:text-slate-400 py-4">Carregando...</p>}
+                {!isLoading && libraries.length === 0 && (
+                    <p className="text-center text-slate-500 dark:text-slate-400 py-4">Nenhuma biblioteca encontrada.</p>
+                )}
                 <ul className="space-y-4">
-                    {libraries.map((lib) => (
+                    {!isLoading && libraries.map((lib) => (
                         <li key={lib.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                             <div>
                                 {isRootUser || !lib.systemModelId ? (
@@ -196,8 +200,12 @@ const LibraryPage: React.FC = () => {
             {!isRootUser && (
                 <div id="available-templates-section" className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Modelos Disponíveis</h2>
+                    {isLoading && <p className="text-center text-slate-500 dark:text-slate-400 py-4">Carregando...</p>}
+                    {!isLoading && libraryTemplates.length === 0 && (
+                        <p className="text-center text-slate-500 dark:text-slate-400 py-4">Nenhum modelo disponível.</p>
+                    )}
                     <ul className="space-y-4">
-                        {libraryTemplates.map((template, index) => (
+                        {!isLoading && libraryTemplates.map((template, index) => (
                             <li key={template.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                                 <div>
                                     <p className="font-semibold text-slate-800 dark:text-slate-100">{template.name}</p>

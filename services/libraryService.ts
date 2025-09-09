@@ -43,6 +43,10 @@ export class LibraryService {
         return api.delete<void>(`/libraries/${libraryId}/files/${fileId}`);
     }
 
+    static async createBlankFileInLibrary(libraryId: string, fileData: Partial<LibraryFile>): Promise<LibraryFile> {
+        return api.post<LibraryFile>(`/libraries/${libraryId}/files`, fileData);
+    }
+
     // Library Templates (for ROOT users)
     static async getLibraryTemplates(): Promise<Library[]> {
         return api.get<Library[]>('/libraries/library-templates');
@@ -78,6 +82,10 @@ export class LibraryService {
 
     static async deleteFileFromTemplate(templateId: string, fileId: string): Promise<void> {
         return api.delete<void>(`/libraries/library-templates/${templateId}/files/${fileId}`);
+    }
+
+    static async createBlankFileInTemplate(templateId: string, fileData: Partial<LibraryFile>): Promise<LibraryFile> {
+        return api.post<LibraryFile>(`/libraries/library-templates/${templateId}/files`, fileData);
     }
 
     // User actions with templates

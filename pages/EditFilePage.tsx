@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useOutletContext } from 'react-router-dom';
-import { User } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
 import { LibraryFile } from '../types';
 import { get_encoding } from 'tiktoken';
 import { LibraryService } from '../services/libraryService';
 import { AIService } from '../services/aiService';
 import MarkdownEditor from '../components/MarkdownEditor';
 import ReactMarkdown from 'react-markdown';
-import { useIsRootUser } from '../hooks/useIsRootUser';
 
 type Tab = 'editor' | 'preview';
 
 const EditFilePage: React.FC = () => {
     const { libraryId, fileId } = useParams<{ libraryId: string; fileId: string }>();
-    const { user } = useOutletContext<{ user: User | null }>();
+    const { user } = useAuth();
     const navigate = useNavigate();
-    const isRootUser = useIsRootUser(user);
+    const isRootUser = user?.role === 'ROOT';
 
     const [file, setFile] = useState<LibraryFile | null>(null);
     const [content, setContent] = useState('');
@@ -49,23 +47,21 @@ const EditFilePage: React.FC = () => {
 
 
     useEffect(() => {
-        if (!user || !libraryId || !fileId) return;
+        if (!libraryId || !fileId) return;
 
         const fetchFile = async () => {
             setIsLoading(true);
             try {
-                let library;
-                if (isRootUser) {
-                    library = await LibraryService.getLibraryTemplate(libraryId);
-                } else {
-                    library = await LibraryService.getLibrary(user.uid, libraryId);
-                }
+                const library = isRootUser
+                    ? await LibraryService.getLibraryTemplate(libraryId)
+                    : await LibraryService.getLibrary(libraryId);
 
                 const foundFile = library?.files.find(f => f.id === fileId);
                 if (foundFile) {
                     setFile(foundFile);
                     setContent(foundFile.content || '');
                 } else {
+                    console.warn(`File with id ${fileId} not found in library ${libraryId}. Redirecting.`);
                     navigate(`/library/${libraryId}`);
                 }
             } catch (error) {
@@ -77,18 +73,18 @@ const EditFilePage: React.FC = () => {
         };
 
         fetchFile();
-    }, [user, libraryId, fileId, isRootUser, navigate]);
+    }, [libraryId, fileId, isRootUser, navigate]);
 
     const handleSave = async () => {
-        if (!user || !libraryId || !file) return;
+        if (!libraryId || !file) return;
 
         setIsSaving(true);
         try {
             const updatedFile = { ...file, content };
             if (isRootUser) {
-                await LibraryService.updateFileInTemplate(libraryId, updatedFile);
+                await LibraryService.updateFileInTemplate(libraryId, file.id, updatedFile);
             } else {
-                await LibraryService.updateFileInLibrary(user.uid, libraryId, updatedFile);
+                await LibraryService.updateFileInLibrary(libraryId, file.id, updatedFile);
             }
             navigate(`/library/${libraryId}`);
         } catch (error) {

@@ -91,6 +91,41 @@ const LibraryDetailPage: React.FC = () => {
         }
     };
 
+    const handleCreateBlankFile = async () => {
+        if (!libraryId || !library) return;
+        const fileName = prompt("Digite o nome para o novo arquivo em branco:", "Novo Documento.md");
+        if (!fileName) return;
+
+        if (library.files.length >= 10) {
+            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const newFile: Partial<LibraryFile> = {
+                id: uuidv4(),
+                name: fileName,
+                url: 'documento-em-branco',
+                content: `# ${fileName}\n\nEscreva seu conteúdo aqui.`,
+            };
+
+            if (isRootUser) {
+                await LibraryService.createBlankFileInTemplate(libraryId, newFile);
+            } else {
+                await LibraryService.createBlankFileInLibrary(libraryId, newFile);
+            }
+            await fetchData();
+            // Optionally, navigate to the edit page for the new file
+            navigate(`/library/${libraryId}/file/${newFile.id}/edit`);
+        } catch (error) {
+            console.error("Failed to create blank file:", error);
+            alert("Ocorreu um erro ao criar o documento em branco.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleEditFile = (file: LibraryFile) => {
         if (!libraryId) return;
         navigate(`/library/${libraryId}/file/${file.id}/edit`);
@@ -185,7 +220,14 @@ const LibraryDetailPage: React.FC = () => {
             <Link to="/library" className="text-sky-600 dark:text-sky-500 hover:underline mb-4 inline-block">&larr; Voltar para Bibliotecas</Link>
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{library.name}</h1>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors" disabled={library.files.length >= 10}>Importar Arquivos</button>
+                <div className="flex gap-2">
+                    <button onClick={handleCreateBlankFile} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors" disabled={isLoading || library.files.length >= 10}>
+                        Criar Documento
+                    </button>
+                    <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors" disabled={isLoading || library.files.length >= 10}>
+                        Importar Arquivos
+                    </button>
+                </div>
                 <input
                     type="file"
                     ref={fileInputRef}
