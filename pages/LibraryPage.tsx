@@ -97,6 +97,7 @@ const LibraryPage: React.FC = () => {
     const handleDelete = async (library: Library) => {
         if (!user) return;
         if (window.confirm(`Tem certeza que deseja excluir a biblioteca "${library.name}"?`)) {
+            setIsLoading(true);
             try {
                 if (isRootUser) {
                     await LibraryService.deleteLibraryTemplate(library.id);
@@ -108,12 +109,15 @@ const LibraryPage: React.FC = () => {
             } catch (error) {
                 console.error("Failed to delete library:", error);
                 alert("Ocorreu um erro ao excluir a biblioteca. Por favor, tente novamente.");
+            } finally {
+                setIsLoading(false);
             }
         }
     };
 
     const handleImportLibrary = async (template: Library) => {
         if (!user) return;
+        setIsLoading(true);
         try {
             await LibraryService.importLibraryTemplate(template.id);
             setLibraries(await LibraryService.getLibraries());
@@ -121,6 +125,8 @@ const LibraryPage: React.FC = () => {
         } catch (error) {
             console.error("Failed to import library:", error);
             alert("Ocorreu um erro ao importar a biblioteca. Por favor, tente novamente.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -173,7 +179,8 @@ const LibraryPage: React.FC = () => {
                                 )}
                                 <button
                                     onClick={() => handleDelete(lib)}
-                                    className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors"
+                                    className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors disabled:bg-red-400 disabled:cursor-not-allowed"
+                                    disabled={isLoading}
                                 >
                                     Excluir
                                 </button>
@@ -199,7 +206,8 @@ const LibraryPage: React.FC = () => {
                                 <button
                                     id={index === 0 ? 'import-template-button' : undefined}
                                     onClick={() => handleImportLibrary(template)}
-                                    className="px-3 py-1 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition-colors"
+                                    className="px-3 py-1 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+                                    disabled={isLoading}
                                 >
                                     Importar
                                 </button>
