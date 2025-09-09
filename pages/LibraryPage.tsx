@@ -65,7 +65,7 @@ const LibraryPage: React.FC = () => {
         }
     };
 
-    const handleCreateLibrary = async (name: string, sources: Source[], isSystemModel: boolean) => {
+    const handleCreateLibrary = async (name: string, isSystemModel: boolean) => {
         if (!user) return;
 
         if (!isRootUser && libraries.length >= 5) {
@@ -73,18 +73,9 @@ const LibraryPage: React.FC = () => {
             return;
         }
 
-        if (sources.length > 10) {
-            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
-            return;
-        }
-
         setIsLoading(true);
 
         try {
-            // NOTE: The new API doesn't support creating files with content directly.
-            // The flow would be: create library, then upload files.
-            // For now, we create an empty library and the user can add files later.
-            // This part of the UI might need a bigger refactor to support the new flow.
             const newLibraryData: Partial<Library> = { name, isSystemModel };
 
             if (isRootUser) {
