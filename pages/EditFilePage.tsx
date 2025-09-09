@@ -8,6 +8,9 @@ import { AIService } from '../services/aiService';
 import MarkdownEditor from '../components/MarkdownEditor';
 import ReactMarkdown from 'react-markdown';
 
+// Initialize the tokenizer once outside the component to prevent re-initialization on every render.
+const enc = get_encoding("cl100k_base");
+
 type Tab = 'editor' | 'preview';
 
 const EditFilePage: React.FC = () => {
@@ -18,6 +21,7 @@ const EditFilePage: React.FC = () => {
 
     const [file, setFile] = useState<LibraryFile | null>(null);
     const [content, setContent] = useState('');
+    const [debouncedContent, setDebouncedContent] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>('editor');
@@ -30,10 +34,21 @@ const EditFilePage: React.FC = () => {
     const MAX_TOKENS = 900000;
     const MAX_BYTES = 1024 * 1024;
 
+    // Debounce effect to update the content for expensive calculations
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedContent(content);
+        }, 500); // 500ms delay
+
+        // Cleanup function to cancel the timeout if the user keeps typing
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [content]);
+
     const stats = useMemo(() => {
-        const enc = get_encoding("cl100k_base");
-        const tokenCount = enc.encode(content).length;
-        const byteCount = new TextEncoder().encode(content).length;
+        const tokenCount = enc.encode(debouncedContent).length;
+        const byteCount = new TextEncoder().encode(debouncedContent).length;
         const tokenPercentage = (tokenCount / MAX_TOKENS) * 100;
         const bytePercentage = (byteCount / MAX_BYTES) * 100;
         return {
@@ -43,7 +58,7 @@ const EditFilePage: React.FC = () => {
             bytePercentage,
             isOverLimit: tokenCount > MAX_TOKENS || byteCount > MAX_BYTES,
         };
-    }, [content]);
+    }, [debouncedContent]);
 
 
     useEffect(() => {

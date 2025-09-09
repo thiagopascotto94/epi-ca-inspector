@@ -48,7 +48,7 @@ const editorExtensions = [
     }),
 ];
 
-const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ value, onChange }) => {
+const MarkdownEditor: React.FC<MarkdownEditorProps> = React.memo(({ value, onChange }) => {
     const editor = useRef<any>();
 
     const applyStyle = (prefix: string, suffix: string = prefix) => {
