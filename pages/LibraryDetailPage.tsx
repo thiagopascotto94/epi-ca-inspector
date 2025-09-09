@@ -216,8 +216,6 @@ const LibraryDetailPage: React.FC = () => {
                     </>
                 )}
             </div>
-
-            <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} onAddBlank={handleAddBlank} isLoading={isLoading} />
         </div>
     );
 };
