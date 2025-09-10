@@ -6,6 +6,7 @@ interface BackgroundJobsCardProps {
     jobs: SimilarityJob[];
     onViewResult: (job: SimilarityJob) => void;
     onDeleteJob: (jobId: string) => void;
+    deletingJobId: string | null;
 }
 
 const StatusBadge: React.FC<{ status: SimilarityJob['status'] }> = ({ status }) => {
@@ -24,7 +25,13 @@ const StatusBadge: React.FC<{ status: SimilarityJob['status'] }> = ({ status }) 
     }
 };
 
-export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, onViewResult, onDeleteJob }) => {
+const LinearProgress: React.FC = () => (
+    <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-blue-600 h-1.5 rounded-full animate-indeterminate-progress"></div>
+    </div>
+);
+
+export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, onViewResult, onDeleteJob, deletingJobId }) => {
     if (jobs.length === 0) {
         return null;
     }
@@ -45,19 +52,31 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                             <div className="flex items-center gap-4">
                                 <StatusBadge status={job.status} />
                                 <div className="flex items-center gap-2">
-                                     {job.status === 'completed' && (
-                                        <button onClick={() => onViewResult(job)} className="px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-600 border border-slate-300 dark:border-slate-500 rounded-md hover:bg-slate-100 dark:hover:bg-slate-500 transition-colors">
-                                            Ver Resultado
-                                        </button>
+                                    {job.id === deletingJobId ? (
+                                        <div className="w-24">
+                                            <LinearProgress />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {job.status === 'completed' && (
+                                                <button onClick={() => onViewResult(job)} className="px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-600 border border-slate-300 dark:border-slate-500 rounded-md hover:bg-slate-100 dark:hover:bg-slate-500 transition-colors">
+                                                    Ver Resultado
+                                                </button>
+                                            )}
+                                            {job.status === 'failed' && (
+                                                <button onClick={() => onViewResult(job)} className="px-3 py-1 text-sm font-medium text-white bg-red-500 border border-red-500 rounded-md hover:bg-red-600 transition-colors">
+                                                    Ver Erro
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => onDeleteJob(job.id)}
+                                                disabled={deletingJobId === job.id}
+                                                className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                                aria-label={`Excluir busca de ${job.inputData.caData.caNumber}`}>
+                                                <TrashIcon className="w-5 h-5" />
+                                            </button>
+                                        </>
                                     )}
-                                     {job.status === 'failed' && (
-                                        <button onClick={() => onViewResult(job)} className="px-3 py-1 text-sm font-medium text-white bg-red-500 border border-red-500 rounded-md hover:bg-red-600 transition-colors">
-                                            Ver Erro
-                                        </button>
-                                    )}
-                                    <button onClick={() => onDeleteJob(job.id)} className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md" aria-label={`Excluir busca de ${job.inputData.caData.caNumber}`}>
-                                        <TrashIcon className="w-5 h-5" />
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -70,6 +89,12 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                                     style={{ width: `${Math.min(100, (job.progress || 0) / (2 * job.totalFiles) * 100)}%` }}>
                                   </div>
                                 </div>
+                            </div>
+                        )}
+                         {job.id === deletingJobId && (
+                            <div className="mt-3">
+                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Excluindo...</p>
+                                <LinearProgress />
                             </div>
                         )}
                     </div>

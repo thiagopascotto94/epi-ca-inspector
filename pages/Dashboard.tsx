@@ -43,6 +43,7 @@ export default function Dashboard() {
 
     // Background Jobs
     const [jobs, setJobs] = useState<SimilarityJob[]>([]);
+    const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
     const [findSimilarResult, setFindSimilarResult] = useState<string | null>(null);
     const [isFindingSimilar, setIsFindingSimilar] = useState(false);
     const [findSimilarError, setFindSimilarError] = useState<string | null>(null);
@@ -259,8 +260,16 @@ export default function Dashboard() {
     };
     
     const handleDeleteJob = async (jobId: string) => {
-        await JobService.deleteJob(jobId);
-        setJobs(await JobService.getAllJobs());
+        setDeletingJobId(jobId);
+        try {
+            await JobService.deleteJob(jobId);
+            setJobs(await JobService.getAllJobs());
+        } catch (error) {
+            console.error("Failed to delete job:", error);
+            // Optionally, show an error message to the user
+        } finally {
+            setDeletingJobId(null);
+        }
     };
 
     return (
@@ -319,7 +328,7 @@ export default function Dashboard() {
                 <ConversionSuggestionCard result={conversionResult} isLoading={isConverting} error={conversionError} loadingMessage={conversionLoadingMessage} />
             ) : null}
 
-            <BackgroundJobsCard jobs={jobs} onViewResult={(job) => setFindSimilarResult(job.result || null)} onDeleteJob={handleDeleteJob} />
+            <BackgroundJobsCard jobs={jobs} onViewResult={(job) => setFindSimilarResult(job.result || null)} onDeleteJob={handleDeleteJob} deletingJobId={deletingJobId} />
         </div>
     );
 }
