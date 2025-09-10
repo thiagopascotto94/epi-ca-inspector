@@ -124,7 +124,7 @@ async function processQueue() {
         setTimeout(processQueue, 0);
         return;
     }
-    
+
     isJobRunning = true;
     console.log(`SW: Starting job ${nextJob.id}`);
 
@@ -185,7 +185,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
 
         const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || firebaseApp.options.apiKey });
         const { caData, libraryFiles, description, libraryName } = job;
-        
+
         const totalFiles = libraryFiles.length;
         await updateDoc(jobDocRef, { totalFiles: totalFiles });
         job.totalFiles = totalFiles;
@@ -209,7 +209,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
                 cleanup();
                 return;
             }
-             // Update progress visually
+            // Update progress visually
             await updateDoc(jobDocRef, {
                 progress: i + 1,
                 progressMessage: `Verificando arquivo ${i + 1}/${totalFiles}: ${file.url}`
@@ -224,7 +224,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
         }
 
         // 3. Final synthesis with JSON response
-        const synthesisPrompt = 
+        const synthesisPrompt =
             `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
             **EPI de Referência (CA ${caData.caNumber}):**
@@ -288,17 +288,19 @@ async function runSimilarityJob(jobId: string, uid: string) {
                 required: ["productName", "confidence", "justification", "detailedJustification"]
             }
         };
-        
+
         const finalResponse = await generateContentWithRetry(ai, {
             model: 'gemini-2.0-flash-lite',
             contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+                temperature: 0,
+            }
         }, 3, (attempt) => {
             updateDoc(jobDocRef, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
         });
-        
+
         console.log('Final response object:', finalResponse);
         console.log('Final response text:', finalResponse.text);
 
@@ -318,7 +320,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
 
         // 5. Show notification
         await self.registration.showNotification('Busca de Similaridade Concluída', {
-            body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`, 
+            body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`,
             icon: '/favicon.ico',
             tag: jobId,
         });
@@ -337,7 +339,7 @@ async function runSimilarityJob(jobId: string, uid: string) {
             currentJobState.error = (e as Error).message || 'Ocorreu um erro desconhecido.';
             currentJobState.completedAt = Date.now();
             await self.registration.showNotification('Busca de Similaridade Falhou', {
-                body: `A busca para o CA ${job.caData.caNumber} encontrou um erro.`, 
+                body: `A busca para o CA ${job.caData.caNumber} encontrou um erro.`,
                 icon: '/favicon.ico',
                 tag: jobId,
             });
