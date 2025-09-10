@@ -40,12 +40,19 @@ export interface Library {
   usageCount?: number;
 }
 
-export interface SimilarityJob {
-  id: string;
+export type JobType = 'ANALYZE_CAS' | 'SUGGEST_CONVERSION' | 'FIND_SIMILAR' | 'EXTRACT_TEXT';
+
+export interface SimilarityJobInput {
   caData: CAData;
   libraryFiles: LibraryFile[];
   libraryName: string;
   description: string;
+}
+
+export interface SimilarityJob {
+  id: string;
+  type: JobType;
+  inputData: SimilarityJobInput;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string; // Will now be a JSON string of ParsedSimilarityResult[]
   error?: string;

@@ -37,9 +37,9 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                     <div key={job.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
                         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                             <div>
-                                <p className="font-bold text-slate-700 dark:text-slate-200">CA {job.caData.caNumber}: {job.caData.equipmentName}</p>
+                                <p className="font-bold text-slate-700 dark:text-slate-200">CA {job.inputData.caData.caNumber}: {job.inputData.caData.equipmentName}</p>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Biblioteca: {job.libraryName} &bull; Criado em: {job.createdAt.toDate().toLocaleString()}
+                                    Biblioteca: {job.inputData.libraryName} &bull; Criado em: {new Date(job.createdAt).toLocaleString()}
                                 </p>
                             </div>
                             <div className="flex items-center gap-4">
@@ -55,7 +55,7 @@ export const BackgroundJobsCard: React.FC<BackgroundJobsCardProps> = ({ jobs, on
                                             Ver Erro
                                         </button>
                                     )}
-                                    <button onClick={() => onDeleteJob(job.id)} className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md" aria-label={`Excluir busca de ${job.caData.caNumber}`}>
+                                    <button onClick={() => onDeleteJob(job.id)} className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-md" aria-label={`Excluir busca de ${job.inputData.caData.caNumber}`}>
                                         <TrashIcon className="w-5 h-5" />
                                     </button>
                                 </div>

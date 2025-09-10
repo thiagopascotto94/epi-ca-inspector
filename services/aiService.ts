@@ -476,10 +476,13 @@ export class AIService {
         }
 
         const jobData = {
-            caData: caData,
-            libraryFiles: selectedLibrary.files,
-            libraryName: selectedLibrary.name,
-            description: description,
+            type: 'FIND_SIMILAR' as const,
+            inputData: {
+                caData: caData,
+                libraryFiles: selectedLibrary.files,
+                libraryName: selectedLibrary.name,
+                description: description,
+            }
         };
 
         // The job will be created in Firestore by JobService.createJob
