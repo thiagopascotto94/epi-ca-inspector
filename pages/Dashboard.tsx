@@ -50,6 +50,7 @@ export default function Dashboard() {
     const [findSimilarProgress, setFindSimilarProgress] = useState(0);
     const [findSimilarTotalFiles, setFindSimilarTotalFiles] = useState(0);
     const [findSimilarProgressMessage, setFindSimilarProgressMessage] = useState('');
+    const [isCreatingJob, setIsCreatingJob] = useState(false);
 
 
     // Conversion Suggestion
@@ -210,7 +211,8 @@ export default function Dashboard() {
 
     const handleFindSimilar = async () => {
         if (!caData || !user) return;
-        
+
+        setIsCreatingJob(true);
         try {
             const jobData = await AIService.findSimilar(caData, findSimilarLibraryId, findSimilarDescription, libraries);
             const newJob = await JobService.createJob(jobData);
@@ -219,15 +221,15 @@ export default function Dashboard() {
 
             // Notify service worker to start processing the job
             if ('serviceWorker' in navigator && user) {
-                const registration = await navigator.serviceWorker.ready; // Wait for the service worker to be ready
-                if (registration.active) { // Ensure there's an active worker
+                const registration = await navigator.serviceWorker.ready;
+                if (registration.active) {
                     const token = getToken();
-                    registration.active.postMessage({ // Use registration.active to post message
+                    registration.active.postMessage({
                         type: 'START_SIMILARITY_JOB',
                         payload: {
                             jobId: newJob.jobId,
                             token: token,
-                            geminiApiKey: process.env.VITE_GEMINI_API_KEY // New: Pass Gemini API Key
+                            geminiApiKey: process.env.VITE_GEMINI_API_KEY
                         }
                     });
                 } else {
@@ -238,9 +240,10 @@ export default function Dashboard() {
                 console.warn('Service Worker API not supported in this browser.');
                 setFindSimilarError('Service Worker API not supported in this browser.');
             }
-
         } catch (error: any) {
             setFindSimilarError(error.message);
+        } finally {
+            setIsCreatingJob(false);
         }
     };
     
@@ -301,6 +304,7 @@ export default function Dashboard() {
                 findSimilarDescription={findSimilarDescription}
                 setFindSimilarDescription={setFindSimilarDescription}
                 handleFindSimilar={handleFindSimilar}
+                isCreatingJob={isCreatingJob}
                 showConversionUI={showConversionUI}
                 setShowConversionUI={setShowConversionUI}
                 conversionLibraryId={conversionLibraryId}
