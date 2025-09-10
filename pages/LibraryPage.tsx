@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
-import { User } from 'firebase/auth';
+import { Link } from 'react-router-dom';
 import { Library, LibraryFile } from '../types';
 import { LibraryService } from '../services/libraryService';
 import CreateLibraryDialog from '../components/CreateLibraryDialog';
 import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
-import { AuthService } from '../authService';
+import { useAuth } from '../contexts/AuthContext';
 import { fetchUrlAsText } from '../services/apiService';
 import { LibraryOnboardingJoyride } from '../components/LibraryOnboardingJoyride';
-import { useIsRootUser } from '../hooks/useIsRootUser';
 
 interface Source {
     type: 'url' | 'file';
@@ -17,30 +15,39 @@ interface Source {
 }
 
 const LibraryPage: React.FC = () => {
-    const { user } = useOutletContext<{ user: User | null }>();
+    const { user } = useAuth();
     const [libraries, setLibraries] = useState<Library[]>([]);
     const [libraryTemplates, setLibraryTemplates] = useState<Library[]>([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [runOnboarding, setRunOnboarding] = useState(false);
-    const isRootUser = useIsRootUser(user);
+    const isRootUser = user?.role === 'ROOT';
 
     useEffect(() => {
         const fetchLibraries = async () => {
             if (user) {
-                if (isRootUser) {
-                    const templates = await LibraryService.getLibraryTemplates();
-                    setLibraries(templates);
-                } else {
-                    const userLibraries = await LibraryService.getLibraries(user.uid);
-                    setLibraries(userLibraries);
-                    const templates = await LibraryService.getLibraryTemplates();
-                    setLibraryTemplates(templates);
+                setIsLoading(true);
+                try {
+                    if (isRootUser) {
+                        const templates = await LibraryService.getLibraryTemplates();
+                        setLibraries(templates);
+                    } else {
+                        const [userLibraries, templates] = await Promise.all([
+                            LibraryService.getLibraries(),
+                            LibraryService.getLibraryTemplates()
+                        ]);
+                        setLibraries(userLibraries);
+                        setLibraryTemplates(templates);
 
-                    const hasSeenOnboarding = localStorage.getItem('hasSeenLibraryOnboarding');
-                    if (!hasSeenOnboarding) {
-                        setRunOnboarding(true);
+                        const hasSeenOnboarding = localStorage.getItem('hasSeenLibraryOnboarding');
+                        if (!hasSeenOnboarding) {
+                            setRunOnboarding(true);
+                        }
                     }
+                } catch (error) {
+                    console.error("Failed to fetch libraries:", error);
+                } finally {
+                    setIsLoading(false);
                 }
             }
         };
@@ -58,7 +65,7 @@ const LibraryPage: React.FC = () => {
         }
     };
 
-    const handleCreateLibrary = async (name: string, sources: Source[], isSystemModel: boolean) => {
+    const handleCreateLibrary = async (name: string, isSystemModel: boolean) => {
         if (!user) return;
 
         if (!isRootUser && libraries.length >= 5) {
@@ -66,49 +73,17 @@ const LibraryPage: React.FC = () => {
             return;
         }
 
-        if (sources.length > 10) {
-            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
-            return;
-        }
-
         setIsLoading(true);
 
         try {
-            const newFiles: LibraryFile[] = [];
-            const enc = get_encoding("cl100k_base");
-
-            for (const source of sources) {
-                let content = '';
-                let url = '';
-
-                if (source.type === 'url') {
-                    content = await fetchUrlAsText(source.value as string);
-                    url = source.value as string;
-                } else {
-                    content = await (source.value as File).text();
-                    url = (source.value as File).name;
-                }
-
-                const tokens = enc.encode(content).length;
-                const bytes = new TextEncoder().encode(content).length;
-
-                if (bytes > 1 * 1024 * 1024 || tokens > 900 * 1000) {
-                    alert(`O arquivo ${url} excede o limite de 1MB ou 900k tokens.`);
-                    setIsLoading(false);
-                    return;
-                }
-
-                newFiles.push({ id: uuidv4(), url, content });
-            }
-
-            const newLibrary: Library = { id: uuidv4(), name, files: newFiles, isSystemModel };
-
-            await LibraryService.createLibrary(user.uid, newLibrary, isRootUser);
+            const newLibraryData: Partial<Library> = { name, isSystemModel };
 
             if (isRootUser) {
+                await LibraryService.createLibraryTemplate(newLibraryData);
                 setLibraries(await LibraryService.getLibraryTemplates());
             } else {
-                setLibraries(await LibraryService.getLibraries(user.uid));
+                await LibraryService.createLibrary(newLibraryData);
+                setLibraries(await LibraryService.getLibraries());
             }
             setIsCreateModalOpen(false);
         } catch (error) {
@@ -122,49 +97,36 @@ const LibraryPage: React.FC = () => {
     const handleDelete = async (library: Library) => {
         if (!user) return;
         if (window.confirm(`Tem certeza que deseja excluir a biblioteca "${library.name}"?`)) {
+            setIsLoading(true);
             try {
                 if (isRootUser) {
                     await LibraryService.deleteLibraryTemplate(library.id);
                     setLibraries(await LibraryService.getLibraryTemplates());
                 } else {
-                    await LibraryService.deleteLibrary(user.uid, library);
-                    setLibraries(await LibraryService.getLibraries(user.uid));
+                    await LibraryService.deleteLibrary(library.id);
+                    setLibraries(await LibraryService.getLibraries());
                 }
             } catch (error) {
                 console.error("Failed to delete library:", error);
                 alert("Ocorreu um erro ao excluir a biblioteca. Por favor, tente novamente.");
+            } finally {
+                setIsLoading(false);
             }
         }
     };
 
     const handleImportLibrary = async (template: Library) => {
         if (!user) return;
+        setIsLoading(true);
         try {
-            await LibraryService.importLibraryTemplate(user.uid, template);
-            setLibraries(await LibraryService.getLibraries(user.uid));
+            await LibraryService.importLibraryTemplate(template.id);
+            setLibraries(await LibraryService.getLibraries());
             alert(`A biblioteca "${template.name}" foi importada com sucesso!`);
         } catch (error) {
             console.error("Failed to import library:", error);
             alert("Ocorreu um erro ao importar a biblioteca. Por favor, tente novamente.");
-        }
-    };
-
-    const handleUpdateLibrary = async (library: Library) => {
-        if (!user) return;
-        const template = libraryTemplates.find(t => t.id === library.systemModelId);
-        if (!template) {
-            alert("Não foi possível encontrar o modelo original para atualização.");
-            return;
-        }
-        if (window.confirm(`Tem certeza que deseja atualizar a biblioteca "${library.name}" com o modelo "${template.name}"? As alterações locais serão perdidas.`)) {
-            try {
-                await LibraryService.updateLibraryFromTemplate(user.uid, library, template);
-                setLibraries(await LibraryService.getLibraries(user.uid));
-                alert(`A biblioteca "${library.name}" foi atualizada com sucesso!`);
-            } catch (error) {
-                console.error("Failed to update library:", error);
-                alert("Ocorreu um erro ao atualizar a biblioteca. Por favor, tente novamente.");
-            }
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -192,8 +154,12 @@ const LibraryPage: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
                     {isRootUser ? 'Modelos de Biblioteca' : 'Minhas Bibliotecas'}
                 </h2>
+                {isLoading && <p className="text-center text-slate-500 dark:text-slate-400 py-4">Carregando...</p>}
+                {!isLoading && libraries.length === 0 && (
+                    <p className="text-center text-slate-500 dark:text-slate-400 py-4">Nenhuma biblioteca encontrada.</p>
+                )}
                 <ul className="space-y-4">
-                    {libraries.map((lib) => (
+                    {!isLoading && libraries.map((lib) => (
                         <li key={lib.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                             <div>
                                 {isRootUser || !lib.systemModelId ? (
@@ -215,17 +181,10 @@ const LibraryPage: React.FC = () => {
                                         Gerenciar
                                     </Link>
                                 )}
-                                {lib.isSystemModel && !isRootUser && (
-                                    <button
-                                        onClick={() => handleUpdateLibrary(lib)}
-                                        className="px-3 py-1 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors"
-                                    >
-                                        Atualizar
-                                    </button>
-                                )}
                                 <button
                                     onClick={() => handleDelete(lib)}
-                                    className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors"
+                                    className="px-3 py-1 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 transition-colors disabled:bg-red-400 disabled:cursor-not-allowed"
+                                    disabled={isLoading}
                                 >
                                     Excluir
                                 </button>
@@ -241,8 +200,12 @@ const LibraryPage: React.FC = () => {
             {!isRootUser && (
                 <div id="available-templates-section" className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md mt-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Modelos Disponíveis</h2>
+                    {isLoading && <p className="text-center text-slate-500 dark:text-slate-400 py-4">Carregando...</p>}
+                    {!isLoading && libraryTemplates.length === 0 && (
+                        <p className="text-center text-slate-500 dark:text-slate-400 py-4">Nenhum modelo disponível.</p>
+                    )}
                     <ul className="space-y-4">
-                        {libraryTemplates.map((template, index) => (
+                        {!isLoading && libraryTemplates.map((template, index) => (
                             <li key={template.id} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-md flex justify-between items-center">
                                 <div>
                                     <p className="font-semibold text-slate-800 dark:text-slate-100">{template.name}</p>
@@ -251,7 +214,8 @@ const LibraryPage: React.FC = () => {
                                 <button
                                     id={index === 0 ? 'import-template-button' : undefined}
                                     onClick={() => handleImportLibrary(template)}
-                                    className="px-3 py-1 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition-colors"
+                                    className="px-3 py-1 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+                                    disabled={isLoading}
                                 >
                                     Importar
                                 </button>

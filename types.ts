@@ -40,12 +40,19 @@ export interface Library {
   usageCount?: number;
 }
 
-export interface SimilarityJob {
-  id: string;
+export type JobType = 'ANALYZE_CAS' | 'SUGGEST_CONVERSION' | 'FIND_SIMILAR' | 'EXTRACT_TEXT';
+
+export interface SimilarityJobInput {
   caData: CAData;
   libraryFiles: LibraryFile[];
   libraryName: string;
   description: string;
+}
+
+export interface SimilarityJob {
+  id: string;
+  type: JobType;
+  inputData: SimilarityJobInput;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string; // Will now be a JSON string of ParsedSimilarityResult[]
   error?: string;
@@ -82,4 +89,25 @@ export interface ClientStats {
   libraries: number;
   documents: number;
   searches: number;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password?: string; // Password is not always required, e.g. for social login
+}
+
+export interface User {
+  id: string;
+  email: string;
+  role: 'USER' | 'ROOT';
+}
+
+export interface AuthResponse {
+  token: string;
+  user?: User; // The user object might be part of the response
+}
+
+export interface CreateJobResponse {
+  message: string;
+  jobId: string;
 }

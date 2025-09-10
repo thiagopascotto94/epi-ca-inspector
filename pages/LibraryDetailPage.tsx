@@ -1,20 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useOutletContext } from 'react-router-dom';
-import { User } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
 import { Library, LibraryFile } from '../types';
 import { LibraryService } from '../services/libraryService';
 import { get_encoding } from 'tiktoken';
 import { v4 as uuidv4 } from 'uuid';
-import AddFileDialog from '../components/AddFileDialog';
 import SearchResults from '../components/SearchResults';
-import { fetchUrlAsText } from '../services/apiService';
-import { useIsRootUser } from '../hooks/useIsRootUser';
-
-interface Source {
-    type: 'url' | 'file';
-    value: string | File;
-}
 
 interface SearchResult {
     file: LibraryFile;
@@ -23,75 +14,113 @@ interface SearchResult {
 
 const LibraryDetailPage: React.FC = () => {
     const { libraryId } = useParams<{ libraryId: string }>();
-    const { user } = useOutletContext<{ user: User | null }>();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [library, setLibrary] = useState<Library | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const isRootUser = useIsRootUser(user);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const isRootUser = user?.role === 'ROOT';
 
     const fetchData = async () => {
-        if (!user || !libraryId) return;
+        if (!libraryId) return;
 
         setIsLoading(true);
-        let fetchedLibrary: Library | null = null;
+        try {
+            const fetchedLibrary = isRootUser
+                ? await LibraryService.getLibraryTemplate(libraryId)
+                : await LibraryService.getLibrary(libraryId);
 
-        if (isRootUser) {
-            fetchedLibrary = await LibraryService.getLibraryTemplate(libraryId);
-        } else {
-            fetchedLibrary = await LibraryService.getLibrary(user.uid, libraryId);
-            if (fetchedLibrary?.systemModelId) {
-                navigate('/library');
-                return;
+            // Redirect regular users away if they somehow access a template-based library directly
+            if (!isRootUser && fetchedLibrary?.isSystemModel) {
+                 navigate('/library');
+                 return;
             }
-        }
 
-        setLibrary(fetchedLibrary);
-        setIsLoading(false);
+            setLibrary(fetchedLibrary);
+        } catch (error) {
+            console.error("Failed to fetch library:", error);
+            setLibrary(null);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     useEffect(() => {
         fetchData();
-    }, [user, libraryId, navigate]);
+    }, [user, libraryId, navigate, isRootUser]);
 
-    const handleAddFiles = async (sources: Source[]) => {
-        if (!user || !libraryId || !library) return;
-        if (library.files.length + sources.length > 10) {
+    const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!libraryId || !library) return;
+        const files = event.target.files;
+        if (!files) return;
+
+        if (library.files.length + files.length > 10) {
             alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
             return;
         }
+
         setIsLoading(true);
         try {
-            const enc = get_encoding("cl100k_base");
-            for (const source of sources) {
-                let content = '';
-                let url = '';
-                if (source.type === 'url') {
-                    content = await fetchUrlAsText(source.value as string);
-                    url = source.value as string;
-                } else {
-                    content = await (source.value as File).text();
-                    url = (source.value as File).name;
-                }
-                const tokens = enc.encode(content).length;
-                const bytes = new TextEncoder().encode(content).length;
-                if (bytes > 1 * 1024 * 1024 || tokens > 900 * 1000) {
-                    alert(`O arquivo ${url} excede o limite de 1MB ou 900k tokens.`);
+            for (const file of Array.from(files)) {
+                // Basic validation, more can be added
+                if (file.size > 5 * 1024 * 1024) { // 5MB limit per file
+                    alert(`O arquivo ${file.name} é muito grande (limite de 5MB).`);
                     continue;
                 }
-                const newFile: LibraryFile = { id: uuidv4(), name: url, url, content };
+
+                const newFileMetadata = { id: uuidv4(), name: file.name };
+
                 if (isRootUser) {
-                    await LibraryService.addFileToTemplate(libraryId, newFile);
+                    await LibraryService.addFileToTemplate(libraryId, file, newFileMetadata);
                 } else {
-                    await LibraryService.addFileToLibrary(user.uid, libraryId, newFile);
+                    await LibraryService.addFileToLibrary(libraryId, file, newFileMetadata);
                 }
             }
-            await fetchData();
-            setIsAddFileDialogOpen(false);
         } catch (error) {
             console.error("Failed to add files:", error);
             alert("Ocorreu um erro ao adicionar os arquivos.");
+        } finally {
+            // Refetch data to show the new files
+            await fetchData();
+            setIsLoading(false);
+            // Reset file input
+            if(fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    const handleCreateBlankFile = async () => {
+        if (!libraryId || !library) return;
+        const fileName = prompt("Digite o nome para o novo arquivo em branco:", "Novo Documento.md");
+        if (!fileName) return;
+
+        if (library.files.length >= 10) {
+            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const newFile: Partial<LibraryFile> = {
+                id: uuidv4(),
+                name: fileName,
+                url: 'documento-em-branco',
+                content: `# ${fileName}\n\nEscreva seu conteúdo aqui.`,
+            };
+
+            if (isRootUser) {
+                await LibraryService.createBlankFileInTemplate(libraryId, newFile);
+            } else {
+                await LibraryService.createBlankFileInLibrary(libraryId, newFile);
+            }
+            await fetchData();
+            // Optionally, navigate to the edit page for the new file
+            navigate(`/library/${libraryId}/file/${newFile.id}/edit`);
+        } catch (error) {
+            console.error("Failed to create blank file:", error);
+            alert("Ocorreu um erro ao criar o documento em branco.");
         } finally {
             setIsLoading(false);
         }
@@ -102,46 +131,16 @@ const LibraryDetailPage: React.FC = () => {
         navigate(`/library/${libraryId}/file/${file.id}/edit`);
     };
 
-    const handleAddBlank = async (name: string) => {
-        if (!user || !libraryId || !library) return;
-        if (library.files.length >= 10) {
-            alert("Você só pode adicionar no máximo 10 arquivos por biblioteca.");
-            return;
-        }
-        setIsLoading(true);
-        try {
-            const newFile: LibraryFile = {
-                id: uuidv4(),
-                name: name,
-                url: 'documento-em-branco',
-                content: `# ${name}\n\n`,
-            };
-            if (isRootUser) {
-                await LibraryService.addFileToTemplate(libraryId, newFile);
-            } else {
-                await LibraryService.addFileToLibrary(user.uid, libraryId, newFile);
-            }
-            await fetchData();
-            setIsAddFileDialogOpen(false);
-            navigate(`/library/${libraryId}/file/${newFile.id}/edit`);
-        } catch (error) {
-            console.error("Failed to add blank file:", error);
-            alert("Ocorreu um erro ao criar o documento em branco.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     const handleRenameFile = async (file: LibraryFile) => {
         const newName = prompt("Digite o novo nome para o arquivo:", file.name);
-        if (newName && newName.trim() !== "") {
+        if (newName && newName.trim() !== "" && libraryId) {
             const updatedFile = { ...file, name: newName.trim() };
             setIsLoading(true);
             try {
                 if (isRootUser) {
-                    await LibraryService.updateFileInTemplate(libraryId!, updatedFile);
+                    await LibraryService.updateFileInTemplate(libraryId, file.id, updatedFile);
                 } else {
-                    await LibraryService.updateFileInLibrary(user!.uid, libraryId!, updatedFile);
+                    await LibraryService.updateFileInLibrary(libraryId, file.id, updatedFile);
                 }
                 await fetchData();
             } catch (error) {
@@ -154,13 +153,13 @@ const LibraryDetailPage: React.FC = () => {
     };
 
     const handleDeleteFile = async (fileId: string) => {
-        if (!user || !libraryId) return;
+        if (!libraryId) return;
         if (window.confirm("Tem certeza que deseja excluir este arquivo?")) {
             try {
                 if (isRootUser) {
                     await LibraryService.deleteFileFromTemplate(libraryId, fileId);
                 } else {
-                    await LibraryService.deleteFileFromLibrary(user.uid, libraryId, fileId);
+                    await LibraryService.deleteFileFromLibrary(libraryId, fileId);
                 }
                 await fetchData();
             } catch (error) {
@@ -221,7 +220,21 @@ const LibraryDetailPage: React.FC = () => {
             <Link to="/library" className="text-sky-600 dark:text-sky-500 hover:underline mb-4 inline-block">&larr; Voltar para Bibliotecas</Link>
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{library.name}</h1>
-                <button onClick={() => setIsAddFileDialogOpen(true)} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors" disabled={library.files.length >= 10}>Adicionar Arquivo</button>
+                <div className="flex gap-2">
+                    <button onClick={handleCreateBlankFile} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors" disabled={isLoading || library.files.length >= 10}>
+                        Criar Documento
+                    </button>
+                    <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-700 transition-colors" disabled={isLoading || library.files.length >= 10}>
+                        Importar Arquivos
+                    </button>
+                </div>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    multiple
+                    onChange={handleFileSelected}
+                    className="hidden"
+                />
             </div>
             {library.files.length >= 10 && <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-4">Você atingiu o limite de 10 arquivos nesta biblioteca.</p>}
 
@@ -245,8 +258,6 @@ const LibraryDetailPage: React.FC = () => {
                     </>
                 )}
             </div>
-
-            <AddFileDialog isOpen={isAddFileDialogOpen} onClose={() => setIsAddFileDialogOpen(false)} onAdd={handleAddFiles} onAddBlank={handleAddBlank} isLoading={isLoading} />
         </div>
     );
 };

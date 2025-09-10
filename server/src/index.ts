@@ -9,21 +9,33 @@ import cors from 'cors';
 import sequelize from './config/database';
 import authRoutes from './auth/auth.routes';
 import libraryRoutes from './library/library.routes';
-// import jobRoutes from './job/job.routes'; // Jobs disabled
+import jobRoutes from './job/job.routes';
+import historyRoutes from './history/history.routes';
 import caRoutes from './ca/ca.routes';
 
 const app = express();
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const corsOptions = {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
+// Increase the limit to handle larger file contents in JSON payloads
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
 // API Routes
 const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/libraries', libraryRoutes);
-// apiRouter.use('/jobs', jobRoutes); // Jobs disabled
+apiRouter.use('/jobs', jobRoutes);
+apiRouter.use('/history', historyRoutes);
 apiRouter.use('/cas', caRoutes);
 app.use('/api', apiRouter);
 

@@ -1,65 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
-import { User } from 'firebase/auth';
-import { AuthService } from './authService';
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 import { Header } from './components/Header';
-import { ConfirmationDialog } from './components/ConfirmationDialog';
-import { Library } from './types';
-import { LibraryService } from './services/libraryService';
+
 const App: React.FC = () => {
-    const [user, setUser] = useState<User | null>(null);
-    const [loadingAuth, setLoadingAuth] = useState(true);
-    const [libraries, setLibraries] = useState<Library[]>([]);
-    const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void; confirmText?: string; color?: string; } | null>(null);
-    const navigate = useNavigate();
+    const { loading } = useAuth();
 
-    useEffect(() => {
-        const unsubscribe = AuthService.onAuthStateChanged(async (user) => {
-            setUser(user);
-            setLoadingAuth(false);
-            if (user) {
-                setLibraries(await LibraryService.getLibraries(user.uid));
-            } else {
-                if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-                    navigate('/login');
-                }
-            }
-        });
-        return () => unsubscribe();
-    }, [navigate]);
-
-    const handleShowConfirmation = (title: string, message: string, onConfirm: () => void, options?: { confirmText?: string; color?: string }) => {
-        setConfirmation({ title, message, onConfirm, ...options });
-    };
-
-    if (loadingAuth) {
+    if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen">
+            <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
                 <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-sky-600"></div>
             </div>
         );
     }
 
     return (
-        <div className={`bg-white min-h-screen`}>
-            <Header 
-                user={user} 
-            />
+        <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+            <Header />
             <main className="container mx-auto p-4">
-                <Outlet context={{ user }} />
+                <Outlet />
             </main>
-            {confirmation?.title && (
-                console.log("ConfirmationDialog is attempting to render with:", confirmation),
-                <ConfirmationDialog
-                    isOpen={!!confirmation}
-                    title={confirmation.title}
-                    message={confirmation.message}
-                    onConfirm={confirmation.onConfirm}
-                    onCancel={() => setConfirmation(null)}
-                    confirmText={confirmation.confirmText}
-                    color={confirmation.color}
-                />
-            )}
         </div>
     );
 };

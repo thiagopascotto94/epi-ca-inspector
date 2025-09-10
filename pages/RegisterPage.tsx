@@ -15,8 +15,9 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.register(email, password);
-      navigate("/dashboard");
+      await AuthService.register({ email, password });
+      // After successful registration, redirect to the login page with a success message.
+      navigate("/login", { state: { message: "Registro bem-sucedido! Por favor, faça login." } });
     } catch (error: any) {
       setError("Falha no registro. O e-mail pode já estar em uso ou a senha é muito fraca.");
       console.error(error);

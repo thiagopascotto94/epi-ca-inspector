@@ -1,7 +1,8 @@
 
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AuthService } from "../authService";
+import { useAuth } from "../contexts/AuthContext";
 import { useDialog } from "../hooks/useDialog";
 import { PromptDialog } from "../components/PromptDialog";
 
@@ -12,14 +13,24 @@ export default function LoginPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login, loginWithGoogle } = useAuth();
   const { dialogState, prompt } = useDialog();
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccess(location.state.message);
+      // Optional: clear the state so the message doesn't reappear on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await AuthService.login(email, password);
+      await login({ email, password });
       navigate("/dashboard");
     } catch (error: any) {
       setError("Falha no login. Verifique seu e-mail e senha.");
@@ -33,7 +44,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await AuthService.loginWithGoogle();
+      await loginWithGoogle();
       navigate("/dashboard");
     } catch (error: any) {
       setError("Falha no login com o Google.");
@@ -49,8 +60,8 @@ export default function LoginPage() {
     const email = await prompt("Por favor, digite seu e-mail para redefinir a senha:");
     if (email) {
       try {
-        await AuthService.resetPassword(email);
-        setSuccess("Um e-mail de redefinição de senha foi enviado para " + email);
+        await AuthService.requestPasswordReset(email);
+        setSuccess("Se o e-mail estiver correto, uma mensagem de redefinição de senha será enviada para " + email);
       } catch (error) {
         setError("Falha ao enviar e-mail de redefinição de senha. Verifique o e-mail digitado.");
         console.error(error);

@@ -13,14 +13,12 @@ import { HistoryService } from '../services/historyService';
 import { AIService } from '../services/aiService';
 import { JobService } from '../services/jobService';
 import { LibraryService } from '../services/libraryService';
-import { useOutletContext } from 'react-router-dom';
-import { User } from 'firebase/auth';
+import { getToken } from '../services/localApiService';
+import { useAuth } from '../contexts/AuthContext';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
-import { useIsRootUser } from '../hooks/useIsRootUser';
 
 export default function Dashboard() {
-    const { user } = useOutletContext<{ user: User | null }>();
-    const uid = user?.uid;
+    const { user } = useAuth();
 
     // Search and CA data state
     const [caNumberInput, setCaNumberInput] = useState('');
@@ -45,6 +43,7 @@ export default function Dashboard() {
 
     // Background Jobs
     const [jobs, setJobs] = useState<SimilarityJob[]>([]);
+    const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
     const [findSimilarResult, setFindSimilarResult] = useState<string | null>(null);
     const [isFindingSimilar, setIsFindingSimilar] = useState(false);
     const [findSimilarError, setFindSimilarError] = useState<string | null>(null);
@@ -73,10 +72,10 @@ export default function Dashboard() {
 
     useEffect(() => {
         const loadInitialData = async () => {
-            if (uid) {
-                setSearchHistory(await HistoryService.getSearchHistory(uid));
-                setJobs(await JobService.getAllJobs(uid));
-                setLibraries(await LibraryService.getLibraries(uid));
+            if (user) {
+                setSearchHistory(await HistoryService.getSearchHistory());
+                setJobs(await JobService.getAllJobs());
+                setLibraries(await LibraryService.getLibraries());
 
                 const hasSeenOnboarding = localStorage.getItem('hasSeenDashboardOnboarding');
                 if (!hasSeenOnboarding) {
@@ -85,7 +84,7 @@ export default function Dashboard() {
             }
         };
         loadInitialData();
-    }, [uid]);
+    }, [user]);
 
     const handleJoyrideCallback = (data: any) => {
         const { status } = data;
@@ -103,7 +102,7 @@ export default function Dashboard() {
             const messageHandler = async (event: MessageEvent) => {
                 if (event.data && event.data.type === 'JOB_UPDATED') {
                     const { jobId } = event.data.payload;
-                    const updatedJobs = await JobService.getAllJobs(uid);
+                    const updatedJobs = await JobService.getAllJobs();
                     const updatedJob = updatedJobs.find(j => j.id === jobId);
 
                     if (updatedJob) {
@@ -135,7 +134,7 @@ export default function Dashboard() {
                 navigator.serviceWorker.removeEventListener('message', messageHandler);
             };
         }
-    }, [uid]); // Depend on uid to re-register listener if uid changes
+    }, [user]); // Depend on user to re-register listener if user changes
 
     // New useEffect for beforeunload confirmation
     useEffect(() => {
@@ -167,8 +166,8 @@ export default function Dashboard() {
             const data = await CAScraperService.fetchAndParse(caNumber, (message) => setLoadingMessage(message));
             if (target === 'primary') {
                 setCaData(data);
-                await HistoryService.addSearchHistory(uid, caNumber);
-                setSearchHistory(await HistoryService.getSearchHistory(uid));
+                await HistoryService.addSearchHistory(caNumber);
+                setSearchHistory(await HistoryService.getSearchHistory());
             } else {
                 setComparisonData(data);
             }
@@ -210,24 +209,24 @@ export default function Dashboard() {
     };
 
     const handleFindSimilar = async () => {
-        if (!caData) return;
+        if (!caData || !user) return;
         
         try {
             const jobData = await AIService.findSimilar(caData, findSimilarLibraryId, findSimilarDescription, libraries);
-            const newJob = await JobService.createJob(uid, jobData);
-            setJobs(await JobService.getAllJobs(uid));
+            const newJob = await JobService.createJob(jobData);
+            setJobs(await JobService.getAllJobs());
             setShowFindSimilarUI(false);
 
             // Notify service worker to start processing the job
-            if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator && user) {
                 const registration = await navigator.serviceWorker.ready; // Wait for the service worker to be ready
                 if (registration.active) { // Ensure there's an active worker
+                    const token = getToken();
                     registration.active.postMessage({ // Use registration.active to post message
                         type: 'START_SIMILARITY_JOB',
                         payload: {
-                            jobId: newJob.id,
-                            apiKey: process.env.VITE_FIREBASE_API_KEY, // Use VITE_ prefix for Vite env vars
-                            uid: uid,
+                            jobId: newJob.jobId,
+                            token: token,
                             geminiApiKey: process.env.VITE_GEMINI_API_KEY // New: Pass Gemini API Key
                         }
                     });
@@ -261,8 +260,16 @@ export default function Dashboard() {
     };
     
     const handleDeleteJob = async (jobId: string) => {
-        await JobService.deleteJob(uid, jobId);
-        setJobs(await JobService.getAllJobs(uid));
+        setDeletingJobId(jobId);
+        try {
+            await JobService.deleteJob(jobId);
+            setJobs(await JobService.getAllJobs());
+        } catch (error) {
+            console.error("Failed to delete job:", error);
+            // Optionally, show an error message to the user
+        } finally {
+            setDeletingJobId(null);
+        }
     };
 
     return (
@@ -302,7 +309,7 @@ export default function Dashboard() {
                 isConverting={isConverting}
             />
 
-            <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(uid); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />
+            <RecentSearches searchHistory={searchHistory} handleFetchAndParse={handleFetchAndParse} handleClearHistory={async () => { await HistoryService.clearSearchHistory(); setSearchHistory([]); }} setCaNumberInput={setCaNumberInput} />
 
             <div className={`grid grid-cols-1 gap-8 ${caData && !comparisonData ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
                 {caData && <div><CADetailCard data={caData} /></div>}
@@ -321,7 +328,7 @@ export default function Dashboard() {
                 <ConversionSuggestionCard result={conversionResult} isLoading={isConverting} error={conversionError} loadingMessage={conversionLoadingMessage} />
             ) : null}
 
-            <BackgroundJobsCard jobs={jobs} onViewResult={(job) => setFindSimilarResult(job.result || null)} onDeleteJob={handleDeleteJob} />
+            <BackgroundJobsCard jobs={jobs} onViewResult={(job) => setFindSimilarResult(job.result || null)} onDeleteJob={handleDeleteJob} deletingJobId={deletingJobId} />
         </div>
     );
 }

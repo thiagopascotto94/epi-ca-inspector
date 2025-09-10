@@ -1,60 +1,51 @@
-import { db } from '../firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { api } from './localApiService';
 import { SimilarityJob } from '../types';
 
 export class JobService {
-    private static getJobCollectionRef(uid: string) {
-        return collection(db, `users/${uid}/jobs`);
-    }
+    // The 'uid' parameter is no longer needed as the user is identified by the JWT token.
 
-    static async getAllJobs(uid: string): Promise<SimilarityJob[]> {
-        if (!uid) return [];
+    static async getAllJobs(): Promise<SimilarityJob[]> {
         try {
-            const q = query(this.getJobCollectionRef(uid), orderBy('createdAt', 'desc'));
-            const querySnapshot = await getDocs(q);
-            return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimilarityJob));
+            return await api.get<SimilarityJob[]>('/jobs');
         } catch (e) {
-            console.error("Failed to load jobs from Firestore", e);
+            console.error("Failed to load jobs from API", e);
             return [];
         }
     }
 
-    static async createJob(uid: string, jobData: Omit<SimilarityJob, 'id' | 'createdAt' | 'status'>): Promise<SimilarityJob> {
-        if (!uid) throw new Error("UID is required to create a job.");
-        const newJob: SimilarityJob = {
-            id: doc(this.getJobCollectionRef(uid)).id, // Generate a new ID for the document
-            ...jobData,
-            status: 'pending',
-            createdAt: serverTimestamp() as any, // Firestore timestamp
-        };
+    static async getJob(jobId: string): Promise<SimilarityJob> {
         try {
-            const jobDocRef = doc(this.getJobCollectionRef(uid), newJob.id);
-            await setDoc(jobDocRef, newJob);
-            return newJob;
+            return await api.get<SimilarityJob>(`/jobs/${jobId}`);
         } catch (e) {
-            console.error("Failed to create job in Firestore", e);
+            console.error(`Failed to load job ${jobId} from API`, e);
             throw e;
         }
     }
 
-    static async updateJob(uid: string, jobId: string, updates: Partial<SimilarityJob>): Promise<void> {
-        if (!uid) return;
+    static async createJob(jobData: Omit<SimilarityJob, 'id' | 'createdAt' | 'status'>): Promise<CreateJobResponse> {
         try {
-            const jobDocRef = doc(this.getJobCollectionRef(uid), jobId);
-            await setDoc(jobDocRef, updates, { merge: true });
+            // The server will handle setting the id, status, and createdAt timestamp.
+            return await api.post<CreateJobResponse>('/jobs', jobData);
         } catch (e) {
-            console.error("Failed to update job in Firestore", e);
+            console.error("Failed to create job via API", e);
             throw e;
         }
     }
 
-    static async deleteJob(uid: string, jobId: string): Promise<void> {
-        if (!uid) return;
+    static async updateJob(jobId: string, updates: Partial<SimilarityJob>): Promise<SimilarityJob> {
         try {
-            const jobDocRef = doc(this.getJobCollectionRef(uid), jobId);
-            await deleteDoc(jobDocRef);
+            return await api.put<SimilarityJob>(`/jobs/${jobId}`, updates);
         } catch (e) {
-            console.error("Failed to delete job from Firestore", e);
+            console.error(`Failed to update job ${jobId} via API`, e);
+            throw e;
+        }
+    }
+
+    static async deleteJob(jobId: string): Promise<void> {
+        try {
+            await api.delete<void>(`/jobs/${jobId}`);
+        } catch (e) {
+            console.error(`Failed to delete job ${jobId} via API`, e);
             throw e;
         }
     }
