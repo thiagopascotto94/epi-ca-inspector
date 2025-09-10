@@ -69,7 +69,7 @@ const request = async <T>(
 
 // Helper methods for different HTTP verbs
 export const api = {
-    get: <T>(endpoint: string) => request<T>(endpoint, { method: 'GET' }),
+    get: <T>(endpoint: string, options: RequestInit = {}) => request<T>(endpoint, { method: 'GET', ...options }),
     post: <T>(endpoint:string, body: any) => request<T>(endpoint, {
         method: 'POST',
         body: body instanceof FormData ? body : JSON.stringify(body),
