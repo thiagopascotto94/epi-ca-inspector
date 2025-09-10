@@ -76,6 +76,8 @@ self.addEventListener('message', async (event) => {
 // --- Local API Helpers ---
 async function apiRequest<T>(endpoint: string, token: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
+    console.log(`[SW] Making API request to: ${url}`);
+
     const headers = new Headers(options.headers || {});
     if (token) {
         headers.append('Authorization', `Bearer ${token}`);
@@ -85,19 +87,32 @@ async function apiRequest<T>(endpoint: string, token: string, options: RequestIn
     }
 
     const config: RequestInit = { ...options, headers };
+    console.log('[SW] Request config:', {
+        method: config.method,
+        headers: Object.fromEntries(config.headers.entries()),
+    });
 
-    const response = await fetch(url, config);
+    try {
+        const response = await fetch(url, config);
 
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(errorData.message || 'An unknown API error occurred');
+        console.log(`[SW] Received response for ${url} with status: ${response.status}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: response.statusText }));
+            console.error(`[SW] API request failed with status ${response.status}:`, errorData);
+            throw new Error(errorData.message || 'An unknown API error occurred');
+        }
+
+        if (response.status === 204) {
+            return null as T;
+        }
+
+        return response.json() as T;
+    } catch (error) {
+        console.error(`[SW] Fetch failed for URL: ${url}. Error:`, error);
+        // Re-throw the error so the calling function can handle it
+        throw error;
     }
-
-    if (response.status === 204) {
-        return null as T;
-    }
-
-    return response.json() as T;
 }
 
 async function getJob(jobId: string, token: string): Promise<SimilarityJob> {
@@ -215,10 +230,11 @@ async function runSimilarityJob(jobId: string, token: string) {
         `;
 
         const finalResponse = await generateContentWithRetry(ai, {
-            model: 'gemini-1.5-flash-latest',
+            model: 'gemini-2.5-flash',
             contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
             generationConfig: {
                 responseMimeType: "application/json",
+                temperature: 0,
             },
         }, 3, (attempt) => {
             updateJob(jobId, token, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
