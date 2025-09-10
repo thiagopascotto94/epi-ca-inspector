@@ -202,6 +202,7 @@ async function runSimilarityJob(jobId: string, token: string) {
         const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
         **EPI de Referência (CA ${caData.caNumber}):**
+        Link Pagina do CA: "https://consultaca.com/${caData.caNumber}"
         \`\`\`json
         ${JSON.stringify(caData, null, 2)}
         \`\`\`
@@ -264,12 +265,14 @@ async function runSimilarityJob(jobId: string, token: string) {
         };
 
         const finalResponse = await generateContentWithRetry(ai, {
-            model: 'gemini-2.5-flash',
+            // @ts-ignore
+            model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL,
             contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
             config: {
                 responseMimeType: "application/json",
-                temperature: 0,
-                responseSchema: responseSchema
+                temperature: 0.05,
+                responseSchema: responseSchema,
+
             },
         }, 3, (attempt) => {
             updateJob(jobId, token, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
