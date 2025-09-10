@@ -7,7 +7,7 @@ import { generateContentWithRetry } from './services/apiService';
 import { SimilarityJob } from './types';
 
 // --- API Configuration ---
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // --- State for Queue and Cancellation ---
 let isJobRunning = false;
@@ -89,7 +89,7 @@ async function apiRequest<T>(endpoint: string, token: string, options: RequestIn
     const config: RequestInit = { ...options, headers };
     console.log('[SW] Request config:', {
         method: config.method,
-        headers: Object.fromEntries(config.headers.entries()),
+        headers: Object.fromEntries((config.headers as Headers).entries()),
     });
 
     try {
@@ -169,7 +169,7 @@ async function runSimilarityJob(jobId: string, token: string) {
         });
         await postJobUpdateToClients(jobId);
 
-        const ai = new GoogleGenAI(self.geminiApiKey || "");
+        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || "" });
         const { inputData } = job;
         const { caData, libraryFiles, description, libraryName } = inputData;
 
@@ -229,12 +229,47 @@ async function runSimilarityJob(jobId: string, token: string) {
         6.  Se nenhum equipamento similar relevante foi encontrado em todas as análises, retorne um array JSON vazio.
         `;
 
+        const responseSchema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    productName: {
+                        type: Type.STRING,
+                        description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
+                    },
+                    caNumber: {
+                        type: Type.STRING,
+                        description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
+                    },
+                    confidence: {
+                        type: Type.NUMBER,
+                        description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
+                    },
+                    justification: {
+                        type: Type.STRING,
+                        description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
+                    },
+                    detailedJustification: {
+                        type: Type.STRING,
+                        description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
+                    },
+                    imageUrl: {
+                        type: Type.STRING,
+                        description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
+                    }
+                },
+                required: ["productName", "confidence", "justification", "detailedJustification"]
+            }
+        };
+
         const finalResponse = await generateContentWithRetry(ai, {
             model: 'gemini-2.5-flash',
             contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
-            generationConfig: {
+            config: {
                 responseMimeType: "application/json",
                 temperature: 0,
+                responseSchema: responseSchema
             },
         }, 3, (attempt) => {
             updateJob(jobId, token, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
