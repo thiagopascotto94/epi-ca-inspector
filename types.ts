@@ -106,3 +106,8 @@ export interface AuthResponse {
   token: string;
   user?: User; // The user object might be part of the response
 }
+
+export interface CreateJobResponse {
+  message: string;
+  jobId: string;
+}

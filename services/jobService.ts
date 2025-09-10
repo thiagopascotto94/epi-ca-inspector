@@ -22,10 +22,10 @@ export class JobService {
         }
     }
 
-    static async createJob(jobData: Omit<SimilarityJob, 'id' | 'createdAt' | 'status'>): Promise<SimilarityJob> {
+    static async createJob(jobData: Omit<SimilarityJob, 'id' | 'createdAt' | 'status'>): Promise<CreateJobResponse> {
         try {
             // The server will handle setting the id, status, and createdAt timestamp.
-            return await api.post<SimilarityJob>('/jobs', jobData);
+            return await api.post<CreateJobResponse>('/jobs', jobData);
         } catch (e) {
             console.error("Failed to create job via API", e);
             throw e;

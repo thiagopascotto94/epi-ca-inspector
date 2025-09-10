@@ -13,6 +13,7 @@ import { HistoryService } from '../services/historyService';
 import { AIService } from '../services/aiService';
 import { JobService } from '../services/jobService';
 import { LibraryService } from '../services/libraryService';
+import { getToken } from '../services/localApiService';
 import { useAuth } from '../contexts/AuthContext';
 import { OnboardingJoyride } from '../components/OnboardingJoyride';
 
@@ -219,12 +220,12 @@ export default function Dashboard() {
             if ('serviceWorker' in navigator && user) {
                 const registration = await navigator.serviceWorker.ready; // Wait for the service worker to be ready
                 if (registration.active) { // Ensure there's an active worker
+                    const token = getToken();
                     registration.active.postMessage({ // Use registration.active to post message
                         type: 'START_SIMILARITY_JOB',
                         payload: {
-                            jobId: newJob.id,
-                            apiKey: process.env.VITE_FIREBASE_API_KEY, // Use VITE_ prefix for Vite env vars
-                            uid: user.id,
+                            jobId: newJob.jobId,
+                            token: token,
                             geminiApiKey: process.env.VITE_GEMINI_API_KEY // New: Pass Gemini API Key
                         }
                     });
