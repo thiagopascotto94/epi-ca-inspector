@@ -69,3 +69,49 @@ export const getUserJobs = async (req: AuthenticatedRequest, res: Response) => {
         res.status(500).json({ message: 'Failed to get user jobs', error });
     }
 };
+
+export const deleteJob = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+
+        const job = await Job.findOne({ where: { id, userId } });
+
+        if (!job) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+
+        await job.destroy();
+
+        res.status(204).send();
+    } catch (error) {
+        console.error('Failed to delete job:', error);
+        res.status(500).json({ message: 'Failed to delete job', error });
+    }
+};
+
+export const updateJob = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const { id } = req.params;
+        const updates = req.body;
+
+        const job = await Job.findOne({ where: { id, userId } });
+
+        if (!job) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Prevent updating certain fields
+        delete updates.id;
+        delete updates.userId;
+        delete updates.inputData;
+
+        const updatedJob = await job.update(updates);
+
+        res.status(200).json(updatedJob);
+    } catch (error) {
+        console.error('Failed to update job:', error);
+        res.status(500).json({ message: 'Failed to update job', error });
+    }
+};
