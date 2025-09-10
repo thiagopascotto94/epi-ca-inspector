@@ -220,7 +220,7 @@ async function runSimilarityJob(jobId: string, token: string) {
         `)}            ---
 
         **Instruções Finais:**
-        1.  Com base nos resultados individuais, identifique até **10 EPIs mais similares** ao de referência. A prioridade é encontrar produtos com **100% de familiaridade** ou o mais próximo possível disso que atendam rigorosamente as especificações porem que tendam a ser mais baratas.
+        1.  IMPORTANTE: Com base nos resultados individuais, identifique até **10 EPIs mais similares** ao de referência. A prioridade é encontrar produtos com **100% de familiaridade** que atendam rigorosamente as especificações que tendam a ser mais baratos.
         2.  **Dê prioridade máxima à "Descrição Adicional" do usuário ao classificar a similaridade.**
         3.  Ordene-os do mais similar para o menos similar na sua resposta final.
         4.  Para cada sugestão, preencha todos os campos do schema JSON solicitado:
