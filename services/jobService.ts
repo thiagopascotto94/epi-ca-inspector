@@ -6,7 +6,7 @@ export class JobService {
 
     static async getAllJobs(): Promise<SimilarityJob[]> {
         try {
-            return await api.get<SimilarityJob[]>('/jobs');
+            return await api.get<SimilarityJob[]>('/jobs', { cache: 'no-cache' });
         } catch (e) {
             console.error("Failed to load jobs from API", e);
             return [];

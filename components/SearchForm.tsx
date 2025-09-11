@@ -35,6 +35,7 @@ interface SearchFormProps {
     setConversionLibraryId: (value: string) => void;
     handleConversionSuggestion: () => void;
     isConverting: boolean;
+    isCreatingJob: boolean;
 }
 
 export const SearchForm: React.FC<SearchFormProps> = (props) => {
@@ -45,7 +46,7 @@ export const SearchForm: React.FC<SearchFormProps> = (props) => {
         selectedLibraryId, setSelectedLibraryId, showFindSimilarUI, setShowFindSimilarUI,
         findSimilarLibraryId, setFindSimilarLibraryId, findSimilarDescription, setFindSimilarDescription,
         handleFindSimilar, showConversionUI, setShowConversionUI, conversionLibraryId,
-        setConversionLibraryId, handleConversionSuggestion, isConverting
+        setConversionLibraryId, handleConversionSuggestion, isConverting, isCreatingJob
     } = props;
 
     return (
@@ -143,13 +144,17 @@ export const SearchForm: React.FC<SearchFormProps> = (props) => {
                                         </div>
                                     </div>
                                     <div className="flex justify-end">
-                                        <button 
-                                            onClick={handleFindSimilar} 
-                                            disabled={IS_DEV_MODE && findSimilarLibraryId === 'none'} 
-                                            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                        <button
+                                            onClick={handleFindSimilar}
+                                            disabled={(IS_DEV_MODE && findSimilarLibraryId === 'none') || isCreatingJob}
+                                            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap w-48"
                                         >
-                                            <SparklesIcon className="w-5 h-5"/>
-                                            Iniciar Busca
+                                            {isCreatingJob ? (
+                                                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                                            ) : (
+                                                <SparklesIcon className="w-5 h-5" />
+                                            )}
+                                            {isCreatingJob ? 'Criando Job...' : 'Iniciar Busca'}
                                         </button>
                                     </div>
                                 </div>

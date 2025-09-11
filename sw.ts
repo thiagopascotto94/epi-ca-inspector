@@ -288,6 +288,7 @@ async function runSimilarityJob(jobId: string, token: string) {
             progress: totalFiles,
             progressMessage: "Finalizado"
         });
+        await postJobUpdateToClients(jobId);
 
         await self.registration.showNotification('Busca de Similaridade Concluída', {
             body: `A busca para o CA ${caData.caNumber} na biblioteca '${libraryName}' foi finalizada. Clique para ver.`,
@@ -303,6 +304,7 @@ async function runSimilarityJob(jobId: string, token: string) {
                 error: (e as Error).message || 'Ocorreu um erro desconhecido.',
                 completedAt: Date.now()
             });
+            await postJobUpdateToClients(jobId);
             await self.registration.showNotification('Busca de Similaridade Falhou', {
                 body: `A busca para o CA ${job.inputData.caData.caNumber} encontrou um erro.`,
                 icon: '/favicon.ico',
