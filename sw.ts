@@ -11,10 +11,6 @@ import { SimilarityJob } from './types';
 import * as tf from '@tensorflow/tfjs';
 import * as use from '@tensorflow-models/universal-sentence-encoder';
 
-// --- TensorFlow.js Backend Configuration ---
-// Set the backend to CPU to ensure compatibility with the Service Worker environment.
-tf.setBackend('cpu').then(() => console.log('TensorFlow.js backend set to CPU.'));
-
 // --- AI/ML Model ---
 // The model will be loaded on demand and cached here.
 let useModelPromise: Promise<use.UniversalSentenceEncoder> | null = null;
@@ -24,12 +20,21 @@ function loadModel(): Promise<use.UniversalSentenceEncoder> {
         return useModelPromise;
     }
     console.log('Loading Universal Sentence Encoder model...');
-    useModelPromise = use.load();
-    useModelPromise.then(() => console.log('Model loaded successfully.'))
-                   .catch(err => {
-                       console.error('Failed to load USE model:', err);
-                       useModelPromise = null; // Reset on failure
-                   });
+
+    // Set backend and load model
+    useModelPromise = (async () => {
+        await tf.setBackend('cpu');
+        console.log('TensorFlow.js backend set to CPU.');
+        const model = await use.load();
+        console.log('Model loaded successfully.');
+        return model;
+    })();
+
+    useModelPromise.catch(err => {
+        console.error('Failed to load USE model or set backend:', err);
+        useModelPromise = null; // Reset on failure
+    });
+
     return useModelPromise;
 }
 
