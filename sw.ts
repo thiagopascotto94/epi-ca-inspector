@@ -1,10 +1,30 @@
 /// <reference lib="webworker" />
 
-declare const self: ServiceWorkerGlobalScope & { geminiApiKey?: string };
+declare const self: ServiceWorkerGlobalScope & {
+    geminiApiKey?: string;
+    useModel?: any; // Universal Sentence Encoder model
+};
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { generateContentWithRetry } from './services/apiService';
 import { SimilarityJob } from './types';
+import * as tf from '@tensorflow/tfjs';
+import * as use from '@tensorflow-models/universal-sentence-encoder';
+
+// --- AI/ML Model ---
+// Load the model once when the worker starts
+self.addEventListener('install', (event) => {
+    console.log('Service Worker: Installing and loading model...');
+    event.waitUntil(
+        use.load().then(model => {
+            self.useModel = model;
+            console.log('Universal Sentence Encoder model loaded.');
+            return self.skipWaiting();
+        }).catch(err => {
+            console.error('Failed to load USE model:', err);
+        })
+    );
+});
 
 // --- API Configuration ---
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -13,12 +33,6 @@ const API_BASE_URL = 'http://localhost:3001/api';
 let isJobRunning = false;
 const cancelledJobIds = new Set<string>();
 
-
-// SW Lifecycle: Install
-self.addEventListener('install', (event) => {
-    console.log('Service Worker: Installing...');
-    event.waitUntil(self.skipWaiting());
-});
 
 // SW Lifecycle: Activate
 self.addEventListener('activate', (event) => {
@@ -54,6 +68,13 @@ self.addEventListener('message', async (event) => {
             return;
         }
 
+        if (!self.useModel) {
+            console.error('USE model is not loaded yet. Aborting job.');
+            // Optionally, you could try to load it again here.
+            return;
+        }
+
+
         self.geminiApiKey = geminiApiKey;
 
         isJobRunning = true;
@@ -73,6 +94,39 @@ self.addEventListener('message', async (event) => {
     }
 });
 
+// --- Text Processing Helpers ---
+function chunkText(text: string, chunkSize: number, overlap: number): string[] {
+    const chunks: string[] = [];
+    let i = 0;
+    while (i < text.length) {
+        const end = Math.min(i + chunkSize, text.length);
+        chunks.push(text.substring(i, end));
+        i += chunkSize - overlap;
+    }
+    return chunks;
+}
+
+async function getEmbeddings(texts: string[]): Promise<tf.Tensor2D> {
+    if (!self.useModel) {
+        throw new Error("Universal Sentence Encoder model not loaded.");
+    }
+    console.log(`Generating embeddings for ${texts.length} texts...`);
+    const embeddings = await self.useModel.embed(texts);
+    console.log("Embeddings generated.");
+    return embeddings;
+}
+
+async function calculateCosineSimilarity(tensorA: tf.Tensor, tensorB: tf.Tensor): Promise<number[]> {
+    const a = tensorA.as2D(1, -1); // Ensure it's a 2D tensor
+    const bNorm = tensorB.norm(2, 1, true);
+    const bNormalized = tensorB.div(bNorm);
+    const aNorm = a.norm(2, 1, true);
+    const aNormalized = a.div(aNorm);
+
+    const similarities = aNormalized.matMul(bNormalized.transpose());
+    return await similarities.data();
+}
+
 // --- Local API Helpers ---
 async function apiRequest<T>(endpoint: string, token: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -87,15 +141,9 @@ async function apiRequest<T>(endpoint: string, token: string, options: RequestIn
     }
 
     const config: RequestInit = { ...options, headers };
-    console.log('[SW] Request config:', {
-        method: config.method,
-        headers: Object.fromEntries((config.headers as Headers).entries()),
-    });
 
     try {
         const response = await fetch(url, config);
-
-        console.log(`[SW] Received response for ${url} with status: ${response.status}`);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: response.statusText }));
@@ -110,7 +158,6 @@ async function apiRequest<T>(endpoint: string, token: string, options: RequestIn
         return response.json() as T;
     } catch (error) {
         console.error(`[SW] Fetch failed for URL: ${url}. Error:`, error);
-        // Re-throw the error so the calling function can handle it
         throw error;
     }
 }
@@ -120,8 +167,6 @@ async function getJob(jobId: string, token: string): Promise<SimilarityJob> {
 }
 
 async function updateJob(jobId: string, token: string, updates: Partial<SimilarityJob>): Promise<SimilarityJob> {
-    // The 'inputData' is not a real column in the database, so we can't update it directly.
-    // We need to send only the top-level fields.
     const validUpdates: { [key: string]: any } = {};
     for (const key in updates) {
         if (key !== 'inputData' && key !== 'id' && key !== 'type' && key !== 'createdAt') {
@@ -151,55 +196,76 @@ async function runSimilarityJob(jobId: string, token: string) {
 
     try {
         job = await getJob(jobId, token);
-
-        if (!job) {
-            throw new Error(`Job ${jobId} not found via API.`);
-        }
-
+        if (!job) throw new Error(`Job ${jobId} not found via API.`);
         if (cancelledJobIds.has(jobId)) {
             console.log(`Job ${jobId} was cancelled before starting.`);
             cleanup();
             return;
         }
 
-        await updateJob(jobId, token, {
-            status: 'processing',
-            progress: 0,
-            progressMessage: 'Iniciando análise...'
-        });
+        await updateJob(jobId, token, { status: 'processing', progress: 0, progressMessage: 'Iniciando análise de similaridade...' });
         await postJobUpdateToClients(jobId);
 
-        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || "" });
         const { inputData } = job;
         const { caData, libraryFiles, description, libraryName } = inputData;
-
         const totalFiles = libraryFiles.length;
-        await updateJob(jobId, token, { totalFiles: totalFiles });
+        await updateJob(jobId, token, { totalFiles });
+
+        // Step 1: Create reference text and its embedding
+        const referenceText = `CA: ${caData.caNumber}. ${caData.equipment}. ${caData.description}. ${description || ''}`.trim();
+        const referenceEmbedding = await getEmbeddings([referenceText]);
+
+        if (cancelledJobIds.has(jobId)) return;
+
+        // Step 2: Process library files, chunk, and find relevant chunks
+        let relevantChunks: { source: string, content: string }[] = [];
+        const SIMILARITY_THRESHOLD = 0.70;
 
         for (let i = 0; i < totalFiles; i++) {
-            if (cancelledJobIds.has(jobId)) {
-                console.log(`Job ${jobId} cancelled during file validation.`);
-                cleanup();
-                return;
-            }
             const file = libraryFiles[i];
-            if (!file.content) {
-                throw new Error(`O conteúdo do arquivo ${file.url} não foi encontrado nos dados do trabalho.`);
+            const progress = (i / totalFiles) * 100;
+            await updateJob(jobId, token, { progress, progressMessage: `Analisando arquivo ${i + 1}/${totalFiles}: ${file.url}` });
+            await postJobUpdateToClients(jobId);
+
+            if (!file.content || cancelledJobIds.has(jobId)) continue;
+
+            const chunks = chunkText(file.content, 1000, 100);
+            if (chunks.length === 0) continue;
+
+            const chunkEmbeddings = await getEmbeddings(chunks);
+            const similarities = await calculateCosineSimilarity(referenceEmbedding, chunkEmbeddings);
+
+            for (let j = 0; j < similarities.length; j++) {
+                if (similarities[j] > SIMILARITY_THRESHOLD) {
+                    relevantChunks.push({
+                        source: file.url,
+                        content: chunks[j]
+                    });
+                }
             }
+            tf.dispose([chunkEmbeddings]); // Clean up tensor
+        }
+        tf.dispose([referenceEmbedding]); // Clean up tensor
+
+        if (cancelledJobIds.has(jobId)) return;
+
+        if (relevantChunks.length === 0) {
             await updateJob(jobId, token, {
-                progress: i + 1,
-                progressMessage: `Verificando arquivo ${i + 1}/${totalFiles}: ${file.url}`
+                status: 'completed',
+                result: '[]', // Empty JSON array
+                completedAt: Date.now(),
+                progress: 100,
+                progressMessage: "Nenhum conteúdo relevante encontrado nos documentos."
             });
             await postJobUpdateToClients(jobId);
-        }
-
-        if (cancelledJobIds.has(jobId)) {
-            console.log(`Job ${jobId} cancelled before final synthesis.`);
-            cleanup();
             return;
         }
 
-        const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
+        await updateJob(jobId, token, { progress: 95, progressMessage: 'Consolidando informações relevantes...' });
+        await postJobUpdateToClients(jobId);
+
+        // Step 3: Synthesize results with GenAI using only relevant chunks
+        const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar trechos de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
 
         **EPI de Referência (CA ${caData.caNumber}):**
         Link Pagina do CA: "https://consultaca.com/${caData.caNumber}"
@@ -210,60 +276,37 @@ async function runSimilarityJob(jobId: string, token: string) {
         **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
         ${description.trim()}
         ` : ''}
-        **Resultados das Análises Individuais dos Documentos:**
-        ---
-        ${libraryFiles.map(file => `Análise do documento ${file.url}:
-        ${file.content || '[Conteúdo não disponível]'}`).join(`
 
+        **Trechos Relevantes Encontrados nos Documentos (Similaridade > 70%):**
         ---
-
-        `)}            ---
+        ${relevantChunks.map(chunk => `Trecho do documento ${chunk.source}:
+        "...${chunk.content}..."`).join(`\n\n---\n\n`)}
+        ---
 
         **Instruções Finais:**
-        1.  IMPORTANTE: Com base nos resultados individuais, identifique até **10 EPIs mais similares** ao de referência. A prioridade é encontrar produtos com **100% de familiaridade** que atendam rigorosamente as especificações que tendam a ser mais baratos.
+        1.  Com base **apenas nos trechos de documentos fornecidos**, identifique até **10 EPIs mais similares** ao de referência.
         2.  **Dê prioridade máxima à "Descrição Adicional" do usuário ao classificar a similaridade.**
-        3.  Ordene-os do mais similar para o menos similar na sua resposta final.
-        4.  Para cada sugestão, preencha todos os campos do schema JSON solicitado:
-            - **justification**: Uma frase **curta e direta** resumindo o motivo da similaridade. Ex: "Ambos são calçados de segurança S3 com biqueira de composite."
-            - **detailedJustification**: Uma análise mais completa em **Markdown**, explicando os prós e contras, comparando materiais, normas e indicações de uso. Use listas para clareza.
-        5.  **Tente extrair a URL completa de uma imagem do produto se houver uma claramente associada a ele nos documentos.** Se não encontrar, deixe o campo em branco.
-        6.  Se nenhum equipamento similar relevante foi encontrado em todas as análises, retorne um array JSON vazio.
-        `;
+        3.  Ordene-os do mais similar para o menos similar.
+        4.  Para cada sugestão, preencha todos os campos do schema JSON.
+        5.  Se nenhum equipamento similar relevante for encontrado nos trechos, retorne um array JSON vazio.`;
 
         const responseSchema = {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    productName: {
-                        type: Type.STRING,
-                        description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
-                    },
-                    caNumber: {
-                        type: Type.STRING,
-                        description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
-                    },
-                    confidence: {
-                        type: Type.NUMBER,
-                        description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
-                    },
-                    justification: {
-                        type: Type.STRING,
-                        description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
-                    },
-                    detailedJustification: {
-                        type: Type.STRING,
-                        description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
-                    },
-                    imageUrl: {
-                        type: Type.STRING,
-                        description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
-                    }
+                    productName: { type: Type.STRING, description: 'O nome, modelo ou identificador claro do produto similar encontrado.' },
+                    caNumber: { type: Type.STRING, description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.' },
+                    confidence: { type: Type.NUMBER, description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.' },
+                    justification: { type: Type.STRING, description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.' },
+                    detailedJustification: { type: Type.STRING, description: 'Uma análise detalhada em formato Markdown comparando os produtos.' },
+                    imageUrl: { type: Type.STRING, description: 'A URL completa de uma imagem do produto, se encontrada.' }
                 },
                 required: ["productName", "confidence", "justification", "detailedJustification"]
             }
         };
 
+        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || "" });
         const finalResponse = await generateContentWithRetry(ai, {
             // @ts-ignore
             model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL,
@@ -272,7 +315,6 @@ async function runSimilarityJob(jobId: string, token: string) {
                 responseMimeType: "application/json",
                 temperature: 0.05,
                 responseSchema: responseSchema,
-
             },
         }, 3, (attempt) => {
             updateJob(jobId, token, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
@@ -285,7 +327,7 @@ async function runSimilarityJob(jobId: string, token: string) {
             status: 'completed',
             result: resultText,
             completedAt: Date.now(),
-            progress: totalFiles,
+            progress: 100,
             progressMessage: "Finalizado"
         });
         await postJobUpdateToClients(jobId);
