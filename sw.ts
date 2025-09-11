@@ -134,6 +134,27 @@ async function calculateCosineSimilarity(tensorA: tf.Tensor, tensorB: tf.Tensor)
 }
 
 // --- Local API Helpers ---
+
+async function fetchTextContent(url: string, token: string): Promise<string> {
+    console.log(`[SW] Fetching text content from: ${url}`);
+    const headers = new Headers();
+    if (token) {
+        headers.append('Authorization', `Bearer ${token}`);
+    }
+
+    try {
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch content from ${url}. Status: ${response.status}`);
+        }
+        return response.text();
+    } catch (error) {
+        console.error(`[SW] Fetch failed for text content at URL: ${url}. Error:`, error);
+        throw error;
+    }
+}
+
+
 async function apiRequest<T>(endpoint: string, token: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log(`[SW] Making API request to: ${url}`);
@@ -233,7 +254,17 @@ async function runSimilarityJob(jobId: string, token: string) {
             await updateJob(jobId, token, { progress, progressMessage: `Analisando arquivo ${i + 1}/${totalFiles}: ${file.url}` });
             await postJobUpdateToClients(jobId);
 
-            if (!file.content || cancelledJobIds.has(jobId)) continue;
+            if (cancelledJobIds.has(jobId)) continue;
+
+            // Fetch content if it's missing
+            if (!file.content) {
+                try {
+                    file.content = await fetchTextContent(file.url, token);
+                } catch (e) {
+                    console.error(`Failed to fetch content for ${file.url}, skipping file.`, e);
+                    continue; // Skip this file if fetching fails
+                }
+            }
 
             const chunks = chunkText(file.content, 1000, 100);
             if (chunks.length === 0) continue;
