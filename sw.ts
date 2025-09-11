@@ -12,19 +12,30 @@ import * as tf from '@tensorflow/tfjs';
 import * as use from '@tensorflow-models/universal-sentence-encoder';
 
 // --- AI/ML Model ---
-// Load the model once when the worker starts
+// The model will be loaded on demand and cached here.
+let useModelPromise: Promise<use.UniversalSentenceEncoder> | null = null;
+
+function loadModel(): Promise<use.UniversalSentenceEncoder> {
+    if (useModelPromise) {
+        return useModelPromise;
+    }
+    console.log('Loading Universal Sentence Encoder model...');
+    useModelPromise = use.load();
+    useModelPromise.then(() => console.log('Model loaded successfully.'))
+                   .catch(err => {
+                       console.error('Failed to load USE model:', err);
+                       useModelPromise = null; // Reset on failure
+                   });
+    return useModelPromise;
+}
+
+
+// SW Lifecycle: Install
 self.addEventListener('install', (event) => {
-    console.log('Service Worker: Installing and loading model...');
-    event.waitUntil(
-        use.load().then(model => {
-            self.useModel = model;
-            console.log('Universal Sentence Encoder model loaded.');
-            return self.skipWaiting();
-        }).catch(err => {
-            console.error('Failed to load USE model:', err);
-        })
-    );
+    console.log('Service Worker: Installing...');
+    event.waitUntil(self.skipWaiting());
 });
+
 
 // --- API Configuration ---
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -68,13 +79,6 @@ self.addEventListener('message', async (event) => {
             return;
         }
 
-        if (!self.useModel) {
-            console.error('USE model is not loaded yet. Aborting job.');
-            // Optionally, you could try to load it again here.
-            return;
-        }
-
-
         self.geminiApiKey = geminiApiKey;
 
         isJobRunning = true;
@@ -107,11 +111,9 @@ function chunkText(text: string, chunkSize: number, overlap: number): string[] {
 }
 
 async function getEmbeddings(texts: string[]): Promise<tf.Tensor2D> {
-    if (!self.useModel) {
-        throw new Error("Universal Sentence Encoder model not loaded.");
-    }
+    const model = await loadModel();
     console.log(`Generating embeddings for ${texts.length} texts...`);
-    const embeddings = await self.useModel.embed(texts);
+    const embeddings = await model.embed(texts);
     console.log("Embeddings generated.");
     return embeddings;
 }
