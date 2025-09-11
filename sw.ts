@@ -124,7 +124,7 @@ async function calculateCosineSimilarity(tensorA: tf.Tensor, tensorB: tf.Tensor)
     const aNormalized = a.div(aNorm);
 
     const similarities = aNormalized.matMul(bNormalized.transpose());
-    return await similarities.data();
+    return Array.from(await similarities.data());
 }
 
 // --- Local API Helpers ---
