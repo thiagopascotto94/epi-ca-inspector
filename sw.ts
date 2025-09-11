@@ -142,6 +142,46 @@ const postJobUpdateToClients = async (jobId: string) => {
     }
 }
 
+function chunkText(text: string, chunkSize: number, overlap: number): string[] {
+    const chunks: string[] = [];
+    let i = 0;
+    while (i < text.length) {
+        const chunk = text.substring(i, i + chunkSize);
+        chunks.push(chunk);
+        i += chunkSize - overlap;
+    }
+    return chunks;
+}
+
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (vecA.length !== vecB.length) {
+        throw new Error('Vectors must have the same length');
+    }
+
+    let dotProduct = 0;
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+    }
+
+    let magnitudeA = 0;
+    for (let i = 0; i < vecA.length; i++) {
+        magnitudeA += vecA[i] * vecA[i];
+    }
+    magnitudeA = Math.sqrt(magnitudeA);
+
+    let magnitudeB = 0;
+    for (let i = 0; i < vecB.length; i++) {
+        magnitudeB += vecB[i] * vecB[i];
+    }
+    magnitudeB = Math.sqrt(magnitudeB);
+
+    if (magnitudeA === 0 || magnitudeB === 0) {
+        return 0;
+    }
+
+    return dotProduct / (magnitudeA * magnitudeB);
+}
+
 async function runSimilarityJob(jobId: string, token: string) {
     const cleanup = () => {
         cancelledJobIds.delete(jobId);
@@ -199,7 +239,44 @@ async function runSimilarityJob(jobId: string, token: string) {
             return;
         }
 
-        const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é consolidar várias análises de documentos e apresentar os EPIs mais similares a um EPI de referência, retornando a resposta em formato JSON.
+        await updateJob(jobId, token, { progressMessage: 'Iniciando busca semântica...' });
+        await postJobUpdateToClients(jobId);
+
+        // 1. Chunking
+        const allContent = libraryFiles.map(file => file.content || '').join('\n\n---\n\n');
+        const knowledgeChunks = chunkText(allContent, 1000, 100);
+
+        // 2. Embedding
+        const embeddingModel = ai.getGenerativeModel({ model: "text-embedding-004" });
+        const query = `CA: ${caData.caNumber} - ${caData.equipmentName}. Descrição: ${description}`;
+
+        await updateJob(jobId, token, { progressMessage: 'Gerando embedding da consulta...' });
+        await postJobUpdateToClients(jobId);
+        const queryResult = await embeddingModel.embedContent(query);
+        const queryEmbedding = queryResult.embedding.values;
+
+        await updateJob(jobId, token, { progressMessage: `Gerando embeddings para ${knowledgeChunks.length} partes do conteúdo...` });
+        await postJobUpdateToClients(jobId);
+        const chunkEmbeddingsResult = await embeddingModel.batchEmbedContents({
+            requests: knowledgeChunks.map(content => ({ content }))
+        });
+        const chunkEmbeddings = chunkEmbeddingsResult.embeddings;
+
+        // 3. Similarity Search
+        const similarities = chunkEmbeddings.map((embedding, index) => ({
+            index,
+            similarity: cosineSimilarity(queryEmbedding, embedding.values)
+        }));
+
+        similarities.sort((a, b) => b.similarity - a.similarity);
+        const topN = 5;
+        const topChunks = similarities.slice(0, topN).map(sim => knowledgeChunks[sim.index]);
+
+        await updateJob(jobId, token, { progressMessage: 'Contexto relevante encontrado. Gerando relatório final...' });
+        await postJobUpdateToClients(jobId);
+
+        // 4. Final Prompt with RAG
+        const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é analisar um EPI de referência e, usando o CONTEXTO FORNECIDO, apresentar os EPIs mais similares, retornando a resposta em formato JSON.
 
         **EPI de Referência (CA ${caData.caNumber}):**
         Link Pagina do CA: "https://consultaca.com/${caData.caNumber}"
@@ -210,24 +287,21 @@ async function runSimilarityJob(jobId: string, token: string) {
         **Descrição Adicional Fornecida pelo Usuário (Critério de Alta Prioridade):**
         ${description.trim()}
         ` : ''}
-        **Resultados das Análises Individuais dos Documentos:**
-        ---
-        ${libraryFiles.map(file => `Análise do documento ${file.url}:
-        ${file.content || '[Conteúdo não disponível]'}`).join(`
 
         ---
-
-        `)}            ---
+        **CONTEXTO FORNECIDO (Use APENAS esta informação para basear sua resposta):**
+        ${topChunks.join('\n\n---\n\n')}
+        ---
 
         **Instruções Finais:**
-        1.  IMPORTANTE: Com base nos resultados individuais, identifique até **10 EPIs mais similares** ao de referência. A prioridade é encontrar produtos com **100% de familiaridade** que atendam rigorosamente as especificações que tendam a ser mais baratos.
+        1.  IMPORTANTE: Com base no CONTEXTO FORNECIDO, identifique até **10 EPIs mais similares** ao de referência.
         2.  **Dê prioridade máxima à "Descrição Adicional" do usuário ao classificar a similaridade.**
         3.  Ordene-os do mais similar para o menos similar na sua resposta final.
         4.  Para cada sugestão, preencha todos os campos do schema JSON solicitado:
             - **justification**: Uma frase **curta e direta** resumindo o motivo da similaridade. Ex: "Ambos são calçados de segurança S3 com biqueira de composite."
             - **detailedJustification**: Uma análise mais completa em **Markdown**, explicando os prós e contras, comparando materiais, normas e indicações de uso. Use listas para clareza.
-        5.  **Tente extrair a URL completa de uma imagem do produto se houver uma claramente associada a ele nos documentos.** Se não encontrar, deixe o campo em branco.
-        6.  Se nenhum equipamento similar relevante foi encontrado em todas as análises, retorne um array JSON vazio.
+        5.  **Tente extrair a URL completa de uma imagem do produto se houver uma claramente associada a ele no CONTEXTO.** Se não encontrar, deixe o campo em branco.
+        6.  Se nenhum equipamento similar relevante foi encontrado no CONTEXTO, retorne um array JSON vazio.
         `;
 
         const responseSchema = {
