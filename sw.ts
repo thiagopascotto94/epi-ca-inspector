@@ -5,6 +5,9 @@ declare const self: ServiceWorkerGlobalScope & { geminiApiKey?: string };
 import { GoogleGenAI, Type } from "@google/genai";
 import { generateContentWithRetry } from './services/apiService';
 import { SimilarityJob } from './types';
+import { RecursiveCharacterTextSplitter } from "@langchain/core/text_splitters";
+import { MemoryVectorStore } from "@langchain/core/vectorstores";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 
 // --- API Configuration ---
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -142,46 +145,6 @@ const postJobUpdateToClients = async (jobId: string) => {
     }
 }
 
-function chunkText(text: string, chunkSize: number, overlap: number): string[] {
-    const chunks: string[] = [];
-    let i = 0;
-    while (i < text.length) {
-        const chunk = text.substring(i, i + chunkSize);
-        chunks.push(chunk);
-        i += chunkSize - overlap;
-    }
-    return chunks;
-}
-
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-    if (vecA.length !== vecB.length) {
-        throw new Error('Vectors must have the same length');
-    }
-
-    let dotProduct = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-    }
-
-    let magnitudeA = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        magnitudeA += vecA[i] * vecA[i];
-    }
-    magnitudeA = Math.sqrt(magnitudeA);
-
-    let magnitudeB = 0;
-    for (let i = 0; i < vecB.length; i++) {
-        magnitudeB += vecB[i] * vecB[i];
-    }
-    magnitudeB = Math.sqrt(magnitudeB);
-
-    if (magnitudeA === 0 || magnitudeB === 0) {
-        return 0;
-    }
-
-    return dotProduct / (magnitudeA * magnitudeB);
-}
-
 async function runSimilarityJob(jobId: string, token: string) {
     const cleanup = () => {
         cancelledJobIds.delete(jobId);
@@ -191,91 +154,66 @@ async function runSimilarityJob(jobId: string, token: string) {
 
     try {
         job = await getJob(jobId, token);
-
-        if (!job) {
-            throw new Error(`Job ${jobId} not found via API.`);
-        }
-
+        if (!job) throw new Error(`Job ${jobId} not found via API.`);
         if (cancelledJobIds.has(jobId)) {
             console.log(`Job ${jobId} was cancelled before starting.`);
             cleanup();
             return;
         }
 
-        await updateJob(jobId, token, {
-            status: 'processing',
-            progress: 0,
-            progressMessage: 'Iniciando análise...'
-        });
+        await updateJob(jobId, token, { status: 'processing', progress: 0, progressMessage: 'Iniciando análise...' });
         await postJobUpdateToClients(jobId);
 
-        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || "" });
         const { inputData } = job;
         const { caData, libraryFiles, description, libraryName } = inputData;
+        const ai = new GoogleGenAI({ apiKey: self.geminiApiKey || "" });
 
-        const totalFiles = libraryFiles.length;
-        await updateJob(jobId, token, { totalFiles: totalFiles });
+        // --- RAG Pipeline with LangChain ---
 
-        for (let i = 0; i < totalFiles; i++) {
-            if (cancelledJobIds.has(jobId)) {
-                console.log(`Job ${jobId} cancelled during file validation.`);
-                cleanup();
-                return;
+        // 1. Chunking
+        await updateJob(jobId, token, { progress: 10, progressMessage: 'Dividindo documentos...' });
+        await postJobUpdateToClients(jobId);
+        const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 100,
+        });
+        const allContent = libraryFiles.map(file => file.content || '').join('\n\n---\n\n');
+        const documents = await textSplitter.createDocuments([allContent]);
+
+        // 2. Embeddings & Vector Store
+        await updateJob(jobId, token, { progress: 30, progressMessage: 'Criando embeddings e vector store...' });
+        await postJobUpdateToClients(jobId);
+        const embeddings = new GoogleGenerativeAIEmbeddings({
+            apiKey: self.geminiApiKey,
+            model: "models/embedding-001"
+        });
+        const vectorStore = await MemoryVectorStore.fromDocuments(documents, embeddings);
+
+        // 3. Retriever
+        const retriever = vectorStore.asRetriever({
+            searchType: "similarity_score_threshold",
+            searchKwargs: {
+                scoreThreshold: 0.3,
+                k: 4
             }
-            const file = libraryFiles[i];
-            if (!file.content) {
-                throw new Error(`O conteúdo do arquivo ${file.url} não foi encontrado nos dados do trabalho.`);
-            }
-            await updateJob(jobId, token, {
-                progress: i + 1,
-                progressMessage: `Verificando arquivo ${i + 1}/${totalFiles}: ${file.url}`
-            });
-            await postJobUpdateToClients(jobId);
-        }
+        });
+        const query = `CA: ${caData.caNumber} - ${caData.equipmentName}. Descrição: ${description}`;
+
+        await updateJob(jobId, token, { progress: 60, progressMessage: 'Buscando documentos relevantes...' });
+        await postJobUpdateToClients(jobId);
+        const relevantDocs = await retriever.invoke(query);
 
         if (cancelledJobIds.has(jobId)) {
-            console.log(`Job ${jobId} cancelled before final synthesis.`);
+            console.log(`Job ${jobId} cancelled after retrieval.`);
             cleanup();
             return;
         }
 
-        await updateJob(jobId, token, { progressMessage: 'Iniciando busca semântica...' });
+        // 4. Final Prompt Generation
+        await updateJob(jobId, token, { progress: 80, progressMessage: 'Gerando relatório final...' });
         await postJobUpdateToClients(jobId);
+        const context = relevantDocs.map(doc => doc.pageContent).join('\n\n---\n\n');
 
-        // 1. Chunking
-        const allContent = libraryFiles.map(file => file.content || '').join('\n\n---\n\n');
-        const knowledgeChunks = chunkText(allContent, 1000, 100);
-
-        // 2. Embedding
-        const embeddingModel = ai.getGenerativeModel({ model: "text-embedding-004" });
-        const query = `CA: ${caData.caNumber} - ${caData.equipmentName}. Descrição: ${description}`;
-
-        await updateJob(jobId, token, { progressMessage: 'Gerando embedding da consulta...' });
-        await postJobUpdateToClients(jobId);
-        const queryResult = await embeddingModel.embedContent(query);
-        const queryEmbedding = queryResult.embedding.values;
-
-        await updateJob(jobId, token, { progressMessage: `Gerando embeddings para ${knowledgeChunks.length} partes do conteúdo...` });
-        await postJobUpdateToClients(jobId);
-        const chunkEmbeddingsResult = await embeddingModel.batchEmbedContents({
-            requests: knowledgeChunks.map(content => ({ content }))
-        });
-        const chunkEmbeddings = chunkEmbeddingsResult.embeddings;
-
-        // 3. Similarity Search
-        const similarities = chunkEmbeddings.map((embedding, index) => ({
-            index,
-            similarity: cosineSimilarity(queryEmbedding, embedding.values)
-        }));
-
-        similarities.sort((a, b) => b.similarity - a.similarity);
-        const topN = 5;
-        const topChunks = similarities.slice(0, topN).map(sim => knowledgeChunks[sim.index]);
-
-        await updateJob(jobId, token, { progressMessage: 'Contexto relevante encontrado. Gerando relatório final...' });
-        await postJobUpdateToClients(jobId);
-
-        // 4. Final Prompt with RAG
         const synthesisPrompt = `Você é um especialista em segurança do trabalho. Sua tarefa é analisar um EPI de referência e, usando o CONTEXTO FORNECIDO, apresentar os EPIs mais similares, retornando a resposta em formato JSON.
 
         **EPI de Referência (CA ${caData.caNumber}):**
@@ -290,7 +228,7 @@ async function runSimilarityJob(jobId: string, token: string) {
 
         ---
         **CONTEXTO FORNECIDO (Use APENAS esta informação para basear sua resposta):**
-        ${topChunks.join('\n\n---\n\n')}
+        ${context}
         ---
 
         **Instruções Finais:**
@@ -309,45 +247,26 @@ async function runSimilarityJob(jobId: string, token: string) {
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    productName: {
-                        type: Type.STRING,
-                        description: 'O nome, modelo ou identificador claro do produto similar encontrado.'
-                    },
-                    caNumber: {
-                        type: Type.STRING,
-                        description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.'
-                    },
-                    confidence: {
-                        type: Type.NUMBER,
-                        description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.'
-                    },
-                    justification: {
-                        type: Type.STRING,
-                        description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.'
-                    },
-                    detailedJustification: {
-                        type: Type.STRING,
-                        description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.'
-                    },
-                    imageUrl: {
-                        type: Type.STRING,
-                        description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.'
-                    }
+                    productName: { type: Type.STRING, description: 'O nome, modelo ou identificador claro do produto similar encontrado.' },
+                    caNumber: { type: Type.STRING, description: 'O número do Certificado de Aprovação (CA) do produto, se disponível.' },
+                    confidence: { type: Type.NUMBER, description: 'Uma estimativa em porcentagem (0-100) de quão confiante você está na correspondência.' },
+                    justification: { type: Type.STRING, description: 'Uma explicação CURTA e direta (uma frase) do porquê o item é similar.' },
+                    detailedJustification: { type: Type.STRING, description: 'Uma análise detalhada em formato Markdown comparando os produtos, destacando prós, contras e diferenças.' },
+                    imageUrl: { type: Type.STRING, description: 'A URL completa de uma imagem do produto, se encontrada nos documentos.' }
                 },
                 required: ["productName", "confidence", "justification", "detailedJustification"]
             }
         };
 
         const finalResponse = await generateContentWithRetry(ai, {
-            // @ts-ignore
-            model: import.meta.env.VITE_GEMINI_FLASH_LITE_MODEL,
+            model: "gemini-1.5-flash-latest", // Using a standard model name
             contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
-            config: {
+            generationConfig: {
                 responseMimeType: "application/json",
                 temperature: 0.05,
-                responseSchema: responseSchema,
-
             },
+            // @ts-ignore - The responseSchema is a valid configuration for some models
+            tools: [{ functionDeclarations: [{ name: 'output_formatter', description: 'Formats the output.', parameters: responseSchema }] }]
         }, 3, (attempt) => {
             updateJob(jobId, token, { progressMessage: `Realizando síntese final (Tentativa ${attempt}/3)...` });
             postJobUpdateToClients(jobId);
@@ -359,7 +278,7 @@ async function runSimilarityJob(jobId: string, token: string) {
             status: 'completed',
             result: resultText,
             completedAt: Date.now(),
-            progress: totalFiles,
+            progress: 100,
             progressMessage: "Finalizado"
         });
         await postJobUpdateToClients(jobId);
