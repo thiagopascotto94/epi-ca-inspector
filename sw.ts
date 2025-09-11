@@ -11,6 +11,10 @@ import { SimilarityJob } from './types';
 import * as tf from '@tensorflow/tfjs';
 import * as use from '@tensorflow-models/universal-sentence-encoder';
 
+// --- TensorFlow.js Backend Configuration ---
+// Set the backend to CPU to ensure compatibility with the Service Worker environment.
+tf.setBackend('cpu').then(() => console.log('TensorFlow.js backend set to CPU.'));
+
 // --- AI/ML Model ---
 // The model will be loaded on demand and cached here.
 let useModelPromise: Promise<use.UniversalSentenceEncoder> | null = null;
