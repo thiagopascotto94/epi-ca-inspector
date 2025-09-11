@@ -249,45 +249,50 @@ async function runSimilarityJob(jobId: string, token: string) {
 
         if (cancelledJobIds.has(jobId)) return;
 
-        // Step 2: Process library files, chunk, and find relevant chunks
-        let relevantChunks: { source: string, content: string }[] = [];
-        const SIMILARITY_THRESHOLD = 0.70;
+        // Step 2: Collect all chunks from all library files
+        await updateJob(jobId, token, { progress: 10, progressMessage: 'Coletando e processando textos...' });
+        await postJobUpdateToClients(jobId);
 
+        let allChunks: { source: string, content: string }[] = [];
         for (let i = 0; i < totalFiles; i++) {
             const file = libraryFiles[i];
-            const progress = (i / totalFiles) * 100;
-            await updateJob(jobId, token, { progress, progressMessage: `Analisando arquivo ${i + 1}/${totalFiles}: ${file.url}` });
-            await postJobUpdateToClients(jobId);
-
-            if (cancelledJobIds.has(jobId)) continue;
+             if (cancelledJobIds.has(jobId)) return; // Early exit if cancelled
 
             // Fetch content if it's missing
             if (!file.content) {
                 try {
                     file.content = await fetchTextContent(file.url, token);
                 } catch (e) {
-                    console.error(`Failed to fetch content for ${file.url}, skipping file.`, e);
+                    console.warn(`Failed to fetch content for ${file.url}, skipping file.`, e);
                     continue; // Skip this file if fetching fails
                 }
             }
-
             const chunks = chunkText(file.content, 1000, 100);
-            if (chunks.length === 0) continue;
-
-            const chunkEmbeddings = await getEmbeddings(chunks);
-            const similarities = await calculateCosineSimilarity(referenceEmbedding, chunkEmbeddings);
-
-            for (let j = 0; j < similarities.length; j++) {
-                if (similarities[j] > SIMILARITY_THRESHOLD) {
-                    relevantChunks.push({
-                        source: file.url,
-                        content: chunks[j]
-                    });
-                }
+            for (const chunk of chunks) {
+                allChunks.push({ source: file.url, content: chunk });
             }
-            tf.dispose([chunkEmbeddings]); // Clean up tensor
         }
-        tf.dispose([referenceEmbedding]); // Clean up tensor
+
+        if (cancelledJobIds.has(jobId)) return;
+
+        // Step 3: Generate embeddings for all chunks in a single batch
+        await updateJob(jobId, token, { progress: 50, progressMessage: `Gerando análise de similaridade para ${allChunks.length} trechos...` });
+        await postJobUpdateToClients(jobId);
+
+        const chunkContents = allChunks.map(c => c.content);
+        const chunkEmbeddings = await getEmbeddings(chunkContents);
+
+        // Step 4: Calculate similarities and find relevant chunks
+        const similarities = await calculateCosineSimilarity(referenceEmbedding, chunkEmbeddings);
+        tf.dispose([referenceEmbedding, chunkEmbeddings]); // Clean up tensors
+
+        const SIMILARITY_THRESHOLD = 0.70;
+        let relevantChunks: { source: string, content: string }[] = [];
+        for (let i = 0; i < similarities.length; i++) {
+            if (similarities[i] > SIMILARITY_THRESHOLD) {
+                relevantChunks.push(allChunks[i]);
+            }
+        }
 
         if (cancelledJobIds.has(jobId)) return;
 
