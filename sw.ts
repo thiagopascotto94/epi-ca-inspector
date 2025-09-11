@@ -5,7 +5,7 @@ declare const self: ServiceWorkerGlobalScope & { geminiApiKey?: string };
 import { Type } from "@google/genai";
 import { SimilarityJob } from './types';
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { MemoryVectorStore } from "@langchain/core/vectorstores";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
