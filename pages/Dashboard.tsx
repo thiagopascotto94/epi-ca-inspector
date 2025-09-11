@@ -97,45 +97,43 @@ export default function Dashboard() {
         }
     };
 
-    // New useEffect for Service Worker messages
+    // Polling for job updates
     useEffect(() => {
-        if ('serviceWorker' in navigator) {
-            const messageHandler = async (event: MessageEvent) => {
-                if (event.data && event.data.type === 'JOB_UPDATED') {
-                    const { jobId } = event.data.payload;
-                    const updatedJobs = await JobService.getAllJobs();
-                    const updatedJob = updatedJobs.find(j => j.id === jobId);
+        const pollJobs = async () => {
+            const activeJobs = jobs.some(job => job.status === 'pending' || job.status === 'processing');
+            if (activeJobs) {
+                const updatedJobs = await JobService.getAllJobs();
+                setJobs(updatedJobs);
+            }
+        };
 
-                    if (updatedJob) {
-                        setJobs(updatedJobs); // Update the list of all jobs
+        const intervalId = setInterval(pollJobs, 5000); // Poll every 5 seconds
 
-                        // Update specific states for FindSimilarCard if it's the active job
-                        if (updatedJob.status === 'processing' || updatedJob.status === 'pending') {
-                            setIsFindingSimilar(true);
-                            setFindSimilarProgress(updatedJob.progress || 0);
-                            setFindSimilarTotalFiles(updatedJob.totalFiles || 0);
-                            setFindSimilarProgressMessage(updatedJob.progressMessage || '');
-                        } else if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
-                            setIsFindingSimilar(false);
-                            setFindSimilarProgress(updatedJob.totalFiles || 0); // Set to total on completion/failure
-                            setFindSimilarProgressMessage(updatedJob.progressMessage || '');
-                            if (updatedJob.status === 'completed') {
-                                setFindSimilarResult(updatedJob.result || null);
-                            } else {
-                                setFindSimilarError(updatedJob.error || null);
-                            }
-                        }
-                    }
-                }
-            };
+        return () => clearInterval(intervalId);
+    }, [jobs]);
 
-            navigator.serviceWorker.addEventListener('message', messageHandler);
+    useEffect(() => {
+        const activeJob = jobs.find(job => job.status === 'pending' || job.status === 'processing');
 
-            return () => {
-                navigator.serviceWorker.removeEventListener('message', messageHandler);
-            };
+        if (activeJob) {
+            setIsFindingSimilar(true);
+            setFindSimilarProgress(activeJob.progress || 0);
+            setFindSimilarTotalFiles(activeJob.totalFiles || 0);
+            setFindSimilarProgressMessage(activeJob.progressMessage || '');
+        } else {
+            setIsFindingSimilar(false);
         }
-    }, [user]); // Depend on user to re-register listener if user changes
+
+        const completedJob = jobs.find(job => job.status === 'completed');
+        if (completedJob) {
+            setFindSimilarResult(completedJob.result || null);
+        }
+
+        const failedJob = jobs.find(job => job.status === 'failed');
+        if (failedJob) {
+            setFindSimilarError(failedJob.error || null);
+        }
+    }, [jobs]);
 
     // New useEffect for beforeunload confirmation
     useEffect(() => {
